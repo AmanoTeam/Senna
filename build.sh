@@ -207,11 +207,11 @@ for target in "${targets[@]}"; do
 		--jobs="$(($(nproc) * 12))"
 	make install
 	
-	cd "${toolchain_directory}/${triple}/bin"
+	cd "${toolchain_directory}/${target}/bin"
 	
 	for name in *; do
 		rm "${name}"
-		ln -s "../../bin/${triple}-${name}" "${name}"
+		ln -s "../../bin/${target}-${name}" "${name}"
 	done
 	
 	rm --recursive "${toolchain_directory}/share"
