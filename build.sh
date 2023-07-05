@@ -30,6 +30,8 @@ declare -r serenity_directory='/tmp/serenity-a627c15b077f6d11e160b4ec5995e2984fc
 declare -r optflags='-Os'
 declare -r linkflags='-Wl,-s'
 
+source "./submodules/obggcc/toolchains/${1}.sh"
+
 if ! [ -f "${gmp_tarball}" ]; then
 	wget --no-verbose 'https://mirrors.kernel.org/gnu/gmp/gmp-6.2.1.tar.xz' --output-document="${gmp_tarball}"
 	tar --directory="$(dirname "${gmp_directory}")" --extract --file="${gmp_tarball}"
@@ -51,7 +53,7 @@ if ! [ -f "${binutils_tarball}" ]; then
 fi
 
 if ! [ -f "${gcc_tarball}" ]; then
-	wget --no-verbose 'https://ftp.gnu.org/gnu/gcc/gcc-13.1.0/gcc-13.1.0.tar.xz' --output-document="${gcc_tarball}"
+	wget --no-verbose 'https://mirrors.kernel.org/gnu/gcc/gcc-13.1.0/gcc-13.1.0.tar.xz' --output-document="${gcc_tarball}"
 	tar --directory="$(dirname "${gcc_directory}")" --extract --file="${gcc_tarball}"
 fi
 
@@ -74,6 +76,7 @@ cd "${gmp_directory}/build"
 rm --force --recursive ./*
 
 ../configure \
+	--host="${CROSS_COMPILE_TRIPLET}" \
 	--prefix="${toolchain_directory}" \
 	--enable-shared \
 	--enable-static \
@@ -90,6 +93,7 @@ cd "${mpfr_directory}/build"
 rm --force --recursive ./*
 
 ../configure \
+	--host="${CROSS_COMPILE_TRIPLET}" \
 	--prefix="${toolchain_directory}" \
 	--with-gmp="${toolchain_directory}" \
 	--enable-shared \
@@ -107,6 +111,7 @@ cd "${mpc_directory}/build"
 rm --force --recursive ./*
 
 ../configure \
+	--host="${CROSS_COMPILE_TRIPLET}" \
 	--prefix="${toolchain_directory}" \
 	--with-gmp="${toolchain_directory}" \
 	--enable-shared \
@@ -139,6 +144,7 @@ for target in "${targets[@]}"; do
 	rm --force --recursive ./*
 	
 	../configure \
+		--host="${CROSS_COMPILE_TRIPLET}" \
 		--target="${target}" \
 		--prefix="${toolchain_directory}" \
 		--enable-gold \
@@ -146,6 +152,11 @@ for target in "${targets[@]}"; do
 		--enable-lto \
 		--disable-gprofng \
 		--with-static-standard-libraries \
+		--disable-werror \
+		--disable-gdb \
+		--disable-nls \
+		--enable-libiberty \
+		--with-sysroot="${toolchain_directory}/${target}" \
 		CFLAGS="${optflags}" \
 		CXXFLAGS="${optflags}" \
 		LDFLAGS="${linkflags}"
@@ -159,6 +170,7 @@ for target in "${targets[@]}"; do
 	rm --force --recursive ./*
 	
 	../configure \
+		--host="${CROSS_COMPILE_TRIPLET}" \
 		--target="${target}" \
 		--prefix="${toolchain_directory}" \
 		--with-linker-hash-style='gnu' \
@@ -170,7 +182,7 @@ for target in "${targets[@]}"; do
 		--enable-__cxa_atexit \
 		--enable-cet='auto' \
 		--enable-checking='release' \
-		--enable-clocale='gnu' \
+		--enable-clocale='newlib' \
 		--enable-default-ssp \
 		--enable-gnu-indirect-function \
 		--enable-gnu-unique-object \
@@ -183,22 +195,22 @@ for target in "${targets[@]}"; do
 		--enable-threads='posix' \
 		--enable-libssp \
 		--enable-languages='c,c++' \
+		--enable-ld \
+		--enable-gold \
 		--disable-libgomp \
 		--disable-bootstrap \
 		--disable-multilib \
 		--disable-libstdcxx-pch \
 		--disable-werror \
+		--disable-nls \
 		--without-headers \
-		--enable-ld \
-		--enable-gold \
 		--with-gcc-major-version-only \
 		--with-pkgversion="Senna v0.1-${revision}" \
 		--with-sysroot="${toolchain_directory}/${target}" \
 		--with-native-system-header-dir='/include' \
-		--disable-nls \
 		CFLAGS="${optflags}" \
 		CXXFLAGS="${optflags}" \
-		LDFLAGS="${linkflags}"
+		LDFLAGS="-Wl,-rpath-link,${OBGGCC_TOOLCHAIN}/${CROSS_COMPILE_TRIPLET}/lib"
 	
 	LD_LIBRARY_PATH="${toolchain_directory}/lib" PATH="${PATH}:${toolchain_directory}/bin" make \
 		CFLAGS_FOR_TARGET="${optflags} ${linkflags}" \
@@ -220,5 +232,3 @@ for target in "${targets[@]}"; do
 	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${target}/"*'/cc1plus'
 	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${target}/"*'/lto1'
 done
-
-tar --directory="$(dirname "${toolchain_directory}")" --create --file=- "$(basename "${toolchain_directory}")" |  xz --threads=0 --compress -9 > "${toolchain_tarball}"
