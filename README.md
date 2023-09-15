@@ -1,4 +1,4 @@
-# Sphynx
+# Senna
 
 A GCC cross-compiler targeting SerenityOS.
 
