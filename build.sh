@@ -4,71 +4,153 @@ set -eu
 
 declare -r revision="$(git rev-parse --short HEAD)"
 
-declare -r current_source_directory="${PWD}"
+declare -r workdir="${PWD}"
 
 declare -r toolchain_directory='/tmp/senna'
-declare -r toolchain_tarball="${current_source_directory}/serenity-cross.tar.xz"
+declare -r share_directory="${toolchain_directory}/usr/local/share/senna"
 
 declare -r gmp_tarball='/tmp/gmp.tar.xz'
-declare -r gmp_directory='/tmp/gmp-6.2.1'
+declare -r gmp_directory='/tmp/gmp-6.3.0'
 
 declare -r mpfr_tarball='/tmp/mpfr.tar.xz'
-declare -r mpfr_directory='/tmp/mpfr-4.2.0'
+declare -r mpfr_directory='/tmp/mpfr-4.2.1'
 
 declare -r mpc_tarball='/tmp/mpc.tar.gz'
 declare -r mpc_directory='/tmp/mpc-1.3.1'
 
 declare -r binutils_tarball='/tmp/binutils.tar.xz'
-declare -r binutils_directory='/tmp/binutils-2.40'
+declare -r binutils_directory='/tmp/binutils-2.41'
 
 declare -r gcc_tarball='/tmp/gcc.tar.gz'
-declare -r gcc_directory='/tmp/gcc-13.1.0'
+declare -r gcc_directory='/tmp/gcc-13.2.0'
 
-declare -r serenity_tarball='/tmp/serenity.tar.gz'
-declare -r serenity_directory='/tmp/serenity-a627c15b077f6d11e160b4ec5995e2984fc1ca5d'
+declare -r serenity_directory="${workdir}/submodules/serenity"
 
-declare -r optflags='-Os'
-declare -r linkflags='-Wl,-s'
+declare -r optflags="-w -O2"
+declare -r linkflags="-Wl,-s"
 
-source "./submodules/obggcc/toolchains/${1}.sh"
+declare -r max_jobs="$(($(nproc) * 17))"
+
+declare -ra triplets=(
+	'riscv64-unknown-serenity'
+	'x86_64-unknown-serenity'
+	'aarch64-unknown-serenity'
+)
+
+declare build_type="${1}"
+
+if [ -z "${build_type}" ]; then
+	build_type='native'
+fi
+
+declare is_native='0'
+
+if [ "${build_type}" = 'native' ]; then
+	is_native='1'
+fi
+
+declare CROSS_COMPILE_TRIPLET=''
+
+if ! (( is_native )); then
+	source "./submodules/obggcc/toolchains/${build_type}.sh"
+fi
+
+declare -r \
+	build_type \
+	is_native
 
 if ! [ -f "${gmp_tarball}" ]; then
-	wget --no-verbose 'https://mirrors.kernel.org/gnu/gmp/gmp-6.2.1.tar.xz' --output-document="${gmp_tarball}"
-	tar --directory="$(dirname "${gmp_directory}")" --extract --file="${gmp_tarball}"
+	curl \
+		--url 'https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz' \
+		--retry '30' \
+		--retry-all-errors \
+		--retry-delay '0' \
+		--retry-max-time '0' \
+		--location \
+		--silent \
+		--output "${gmp_tarball}"
+	
+	tar \
+		--directory="$(dirname "${gmp_directory}")" \
+		--extract \
+		--file="${gmp_tarball}"
 fi
 
 if ! [ -f "${mpfr_tarball}" ]; then
-	wget --no-verbose 'https://mirrors.kernel.org/gnu/mpfr/mpfr-4.2.0.tar.xz' --output-document="${mpfr_tarball}"
-	tar --directory="$(dirname "${mpfr_directory}")" --extract --file="${mpfr_tarball}"
+	curl \
+		--url 'https://ftp.gnu.org/gnu/mpfr/mpfr-4.2.1.tar.xz' \
+		--retry '30' \
+		--retry-all-errors \
+		--retry-delay '0' \
+		--retry-max-time '0' \
+		--location \
+		--silent \
+		--output "${mpfr_tarball}"
+	
+	tar \
+		--directory="$(dirname "${mpfr_directory}")" \
+		--extract \
+		--file="${mpfr_tarball}"
 fi
 
 if ! [ -f "${mpc_tarball}" ]; then
-	wget --no-verbose 'https://mirrors.kernel.org/gnu/mpc/mpc-1.3.1.tar.gz' --output-document="${mpc_tarball}"
-	tar --directory="$(dirname "${mpc_directory}")" --extract --file="${mpc_tarball}"
+	curl \
+		--url 'https://ftp.gnu.org/gnu/mpc/mpc-1.3.1.tar.gz' \
+		--retry '30' \
+		--retry-all-errors \
+		--retry-delay '0' \
+		--retry-max-time '0' \
+		--location \
+		--silent \
+		--output "${mpc_tarball}"
+	
+	tar \
+		--directory="$(dirname "${mpc_directory}")" \
+		--extract \
+		--file="${mpc_tarball}"
 fi
 
 if ! [ -f "${binutils_tarball}" ]; then
-	wget --no-verbose 'https://mirrors.kernel.org/gnu/binutils/binutils-2.40.tar.xz' --output-document="${binutils_tarball}"
-	tar --directory="$(dirname "${binutils_directory}")" --extract --file="${binutils_tarball}"
+	curl \
+		--url 'https://ftp.gnu.org/gnu/binutils/binutils-2.41.tar.xz' \
+		--retry '30' \
+		--retry-all-errors \
+		--retry-delay '0' \
+		--retry-max-time '0' \
+		--location \
+		--silent \
+		--output "${binutils_tarball}"
+	
+	tar \
+		--directory="$(dirname "${binutils_directory}")" \
+		--extract \
+		--file="${binutils_tarball}"
+	
+	for name in "${serenity_directory}/Ports/binutils/patches/"*'.patch'; do
+		patch --input="$(realpath "${name}")" --strip=1 --directory="${binutils_directory}"
+	done
 fi
 
 if ! [ -f "${gcc_tarball}" ]; then
-	wget --no-verbose 'https://mirrors.kernel.org/gnu/gcc/gcc-13.1.0/gcc-13.1.0.tar.xz' --output-document="${gcc_tarball}"
-	tar --directory="$(dirname "${gcc_directory}")" --extract --file="${gcc_tarball}"
+	curl \
+		--url 'https://ftp.gnu.org/gnu/gcc/gcc-13.2.0/gcc-13.2.0.tar.xz' \
+		--retry '30' \
+		--retry-all-errors \
+		--retry-delay '0' \
+		--retry-max-time '0' \
+		--location \
+		--silent \
+		--output "${gcc_tarball}"
+	
+	tar \
+		--directory="$(dirname "${gcc_directory}")" \
+		--extract \
+		--file="${gcc_tarball}"
+	
+	for name in "${serenity_directory}/Ports/gcc/patches/"*'.patch'; do
+		patch --input="$(realpath "${name}")" --strip=1 --directory="${gcc_directory}"
+	done
 fi
-
-if ! [ -f "${serenity_tarball}" ]; then
-	wget --no-verbose 'https://codeload.github.com/SerenityOS/serenity/tar.gz/a627c15b077f6d11e160b4ec5995e2984fc1ca5d' --output-document="${serenity_tarball}"
-	tar --directory="$(dirname "${serenity_directory}")" --extract --file="${serenity_tarball}"
-fi
-
-for name in "${serenity_directory}/Ports/gcc/patches/"*'.patch'; do
-	patch --input="$(realpath "${name}")" --strip=1 --directory="${gcc_directory}"
-done
-
-for name in "${serenity_directory}/Ports/binutils/patches/"*'.patch'; do
-	patch --input="$(realpath "${name}")" --strip=1 --directory="${binutils_directory}"
-done
 
 [ -d "${gmp_directory}/build" ] || mkdir "${gmp_directory}/build"
 
@@ -123,21 +205,7 @@ rm --force --recursive ./*
 make all --jobs
 make install
 
-declare -ra targets=(
-	'x86_64-unknown-serenity'
-	'aarch64-unknown-serenity'
-)
-
-for target in "${targets[@]}"; do
-	declare sysroot_tarball="/tmp/${target}.tar.xz"
-	declare sysroot_directory="/tmp/${target}"
-	
-	wget "https://github.com/AmanoTeam/serenity-sysroot/releases/download/0.1/${target}.tar.xz" --output-document="${sysroot_tarball}"
-	
-	tar --directory="$(dirname "${sysroot_directory}")" --extract --file="${sysroot_tarball}"
-	
-	[ -d "${toolchain_directory}/${target}" ] || mv "${sysroot_directory}" "${toolchain_directory}"
-	
+for triplet in "${triplets[@]}"; do
 	[ -d "${binutils_directory}/build" ] || mkdir "${binutils_directory}/build"
 	
 	cd "${binutils_directory}/build"
@@ -145,7 +213,7 @@ for target in "${targets[@]}"; do
 	
 	../configure \
 		--host="${CROSS_COMPILE_TRIPLET}" \
-		--target="${target}" \
+		--target="${triplet}" \
 		--prefix="${toolchain_directory}" \
 		--enable-gold \
 		--enable-ld \
@@ -156,7 +224,7 @@ for target in "${targets[@]}"; do
 		--disable-gdb \
 		--disable-nls \
 		--enable-libiberty \
-		--with-sysroot="${toolchain_directory}/${target}" \
+		--with-sysroot="${toolchain_directory}/${triplet}" \
 		CFLAGS="${optflags}" \
 		CXXFLAGS="${optflags}" \
 		LDFLAGS="${linkflags}"
@@ -164,14 +232,41 @@ for target in "${targets[@]}"; do
 	make all --jobs
 	make install
 	
-	[ -d "${gcc_directory}/build" ] || mkdir "${gcc_directory}/build"
-	cd "${gcc_directory}/build"
+	cd "$(mktemp --directory)"
+	
+	declare sysroot_url="https://github.com/AmanoTeam/serenity-sysroot/releases/latest/download/${triplet}.tar.xz"
+	declare sysroot_file="${PWD}/${triplet}.tar.xz"
+	declare sysroot_directory="${PWD}/${triplet}"
+	
+	curl \
+		--url "${sysroot_url}" \
+		--retry '30' \
+		--retry-all-errors \
+		--retry-delay '0' \
+		--retry-max-time '0' \
+		--location \
+		--silent \
+		--output "${sysroot_file}"
+	
+	tar \
+		--extract \
+		--file="${sysroot_file}"
+	
+	cp --recursive "${sysroot_directory}" "${toolchain_directory}"
 	
 	rm --force --recursive ./*
 	
+	[ -d "${gcc_directory}/build" ] || mkdir "${gcc_directory}/build"
+	
+	cd "${gcc_directory}/build"
+	rm --force --recursive ./*
+	
+	declare cflags_for_target="${optflags} ${linkflags}"
+	declare cxxflags_for_target="${optflags} ${linkflags}"
+	
 	../configure \
 		--host="${CROSS_COMPILE_TRIPLET}" \
-		--target="${target}" \
+		--target="${triplet}" \
 		--prefix="${toolchain_directory}" \
 		--with-linker-hash-style='gnu' \
 		--with-gmp="${toolchain_directory}" \
@@ -179,6 +274,10 @@ for target in "${targets[@]}"; do
 		--with-mpfr="${toolchain_directory}" \
 		--with-static-standard-libraries \
 		--with-bugurl='https://github.com/AmanoTeam/Senna/issues' \
+		--with-gcc-major-version-only \
+		--with-pkgversion="Senna v0.2-${revision}" \
+		--with-sysroot="${toolchain_directory}/${triplet}" \
+		--with-native-system-header-dir='/include' \
 		--enable-__cxa_atexit \
 		--enable-cet='auto' \
 		--enable-checking='release' \
@@ -190,13 +289,14 @@ for target in "${targets[@]}"; do
 		--enable-link-serialization='1' \
 		--enable-linker-build-id \
 		--enable-lto \
-		--enable-plugin \
 		--enable-shared \
 		--enable-threads='posix' \
 		--enable-libssp \
 		--enable-languages='c,c++' \
 		--enable-ld \
 		--enable-gold \
+		--disable-plugin \
+		--disable-libsanitizer \
 		--disable-libgomp \
 		--disable-bootstrap \
 		--disable-multilib \
@@ -204,31 +304,24 @@ for target in "${targets[@]}"; do
 		--disable-werror \
 		--disable-nls \
 		--without-headers \
-		--with-gcc-major-version-only \
-		--with-pkgversion="Senna v0.1-${revision}" \
-		--with-sysroot="${toolchain_directory}/${target}" \
-		--with-native-system-header-dir='/include' \
 		CFLAGS="${optflags}" \
 		CXXFLAGS="${optflags}" \
-		LDFLAGS="-Wl,-rpath-link,${OBGGCC_TOOLCHAIN}/${CROSS_COMPILE_TRIPLET}/lib"
+		LDFLAGS="${linkflags}"
 	
 	LD_LIBRARY_PATH="${toolchain_directory}/lib" PATH="${PATH}:${toolchain_directory}/bin" make \
-		CFLAGS_FOR_TARGET="${optflags} ${linkflags}" \
-		CXXFLAGS_FOR_TARGET="${optflags} ${linkflags}" \
+		CFLAGS_FOR_TARGET="${cflags_for_target}" \
+		CXXFLAGS_FOR_TARGET="${cxxflags_for_target}" \
 		all \
-		--jobs="$(($(nproc) * 12))"
+		--jobs="${max_jobs}"
 	make install
-	
-	cd "${toolchain_directory}/${target}/bin"
-	
-	for name in *; do
-		rm "${name}"
-		ln -s "../../bin/${target}-${name}" "${name}"
-	done
 	
 	rm --recursive "${toolchain_directory}/share"
 	
-	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${target}/"*'/cc1'
-	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${target}/"*'/cc1plus'
-	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${target}/"*'/lto1'
+	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${triplet}/"*'/cc1'
+	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${triplet}/"*'/cc1plus'
+	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${triplet}/"*'/lto1'
 done
+
+mkdir --parent "${share_directory}"
+
+cp --recursive "${workdir}/tools/dev/"* "${share_directory}"
