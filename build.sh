@@ -26,10 +26,13 @@ declare -r gcc_directory='/tmp/gcc-13.2.0'
 
 declare -r serenity_directory="${workdir}/submodules/serenity"
 
-declare -r optflags="-w -O2"
-declare -r linkflags="-Wl,-s"
-
 declare -r max_jobs="$(($(nproc) * 17))"
+
+declare -r optlto="-flto=${max_jobs} -fno-fat-lto-objects"
+declare -r optfatlto="-flto=${max_jobs} -ffat-lto-objects"
+
+declare -r optflags='-w -O2'
+declare -r linkflags='-Wl,-s'
 
 declare -ra triplets=(
 	'riscv64-unknown-serenity'
@@ -162,9 +165,9 @@ rm --force --recursive ./*
 	--prefix="${toolchain_directory}" \
 	--enable-shared \
 	--enable-static \
-	CFLAGS="${optflags}" \
-	CXXFLAGS="${optflags}" \
-	LDFLAGS="${linkflags}"
+	CFLAGS="${optflags} ${optlto}" \
+	CXXFLAGS="${optflags} ${optlto}" \
+	LDFLAGS="${linkflags} ${optlto}"
 
 make all --jobs
 make install
@@ -180,9 +183,9 @@ rm --force --recursive ./*
 	--with-gmp="${toolchain_directory}" \
 	--enable-shared \
 	--enable-static \
-	CFLAGS="${optflags}" \
-	CXXFLAGS="${optflags}" \
-	LDFLAGS="${linkflags}"
+	CFLAGS="${optflags} ${optlto}" \
+	CXXFLAGS="${optflags} ${optlto}" \
+	LDFLAGS="${linkflags} ${optlto}"
 
 make all --jobs
 make install
@@ -198,9 +201,9 @@ rm --force --recursive ./*
 	--with-gmp="${toolchain_directory}" \
 	--enable-shared \
 	--enable-static \
-	CFLAGS="${optflags}" \
-	CXXFLAGS="${optflags}" \
-	LDFLAGS="${linkflags}"
+	CFLAGS="${optflags} ${optlto}" \
+	CXXFLAGS="${optflags} ${optlto}" \
+	LDFLAGS="${linkflags} ${optlto}"
 
 make all --jobs
 make install
@@ -225,9 +228,9 @@ for triplet in "${triplets[@]}"; do
 		--disable-nls \
 		--enable-libiberty \
 		--with-sysroot="${toolchain_directory}/${triplet}" \
-		CFLAGS="${optflags}" \
-		CXXFLAGS="${optflags}" \
-		LDFLAGS="${linkflags}"
+		CFLAGS="${optflags} ${optlto}" \
+		CXXFLAGS="${optflags} ${optlto}" \
+		LDFLAGS="${linkflags} ${optlto}"
 	
 	make all --jobs
 	make install
@@ -275,7 +278,7 @@ for triplet in "${triplets[@]}"; do
 		--with-static-standard-libraries \
 		--with-bugurl='https://github.com/AmanoTeam/Senna/issues' \
 		--with-gcc-major-version-only \
-		--with-pkgversion="Senna v0.2-${revision}" \
+		--with-pkgversion="Senna v0.3-${revision}" \
 		--with-sysroot="${toolchain_directory}/${triplet}" \
 		--with-native-system-header-dir='/include' \
 		--enable-__cxa_atexit \
@@ -304,9 +307,9 @@ for triplet in "${triplets[@]}"; do
 		--disable-werror \
 		--disable-nls \
 		--without-headers \
-		CFLAGS="${optflags}" \
-		CXXFLAGS="${optflags}" \
-		LDFLAGS="${linkflags}"
+		CFLAGS="${optflags} ${optfatlto}" \
+		CXXFLAGS="${optflags} ${optfatlto}" \
+		LDFLAGS="${linkflags} ${optfatlto}"
 	
 	LD_LIBRARY_PATH="${toolchain_directory}/lib" PATH="${PATH}:${toolchain_directory}/bin" make \
 		CFLAGS_FOR_TARGET="${cflags_for_target}" \
