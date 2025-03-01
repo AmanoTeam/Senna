@@ -26,7 +26,7 @@ declare -r gcc_directory='/tmp/gcc-13.2.0'
 
 declare -r serenity_directory="${workdir}/submodules/serenity"
 
-declare -r max_jobs="$(($(nproc) * 17))"
+declare -r max_jobs='40'
 
 declare -r optlto="-flto=${max_jobs} -fno-fat-lto-objects"
 declare -r optfatlto="-flto=${max_jobs} -ffat-lto-objects"
@@ -298,7 +298,7 @@ for triplet in "${triplets[@]}"; do
 		--enable-languages='c,c++' \
 		--enable-ld \
 		--enable-gold \
-		--disable-plugin \
+		--enable-plugin \
 		--disable-libsanitizer \
 		--disable-libgomp \
 		--disable-bootstrap \
