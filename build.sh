@@ -229,7 +229,7 @@ while read file; do
 	sed \
 		--in-place \
 		--regexp-extended \
-		's/(ld_shlibs_CXX)=.*$/\1=yes/; s/(can_build_shared)=.*$/\1=yes/; s/(enable_shared)=.*$/\1=yes/' \
+		's/(ld_shlibs_CXX)=.*$/\1=yes/; s/(can_build_shared)=.*$/\1=yes/; s/(enable_shared)=no/\1=yes/' \
 		"${file}"
 done <<< "$(find '/tmp' -type 'f' -name 'configure')"
 
