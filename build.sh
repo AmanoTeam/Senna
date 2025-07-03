@@ -39,9 +39,9 @@ declare -r optflags='-w -O2 -Xlinker --allow-multiple-definition'
 declare -r linkflags='-Xlinker -s'
 
 declare -ra triplets=(
-	'riscv64-unknown-serenity'
+	# 'riscv64-unknown-serenity'
 	'x86_64-unknown-serenity'
-	'aarch64-unknown-serenity'
+	# 'aarch64-unknown-serenity'
 )
 
 declare build_type="${1}"
@@ -229,7 +229,7 @@ while read file; do
 	sed \
 		--in-place \
 		--regexp-extended \
-		's/(ld_shlibs_CXX)=.*$/\1=yes/' \
+		's/(ld_shlibs_CXX)=.*$/\1=yes/; s/(can_build_shared)=.*$/\1=yes/; s/(enable_shared)=.*$/\1=yes/' \
 		"${file}"
 done <<< "$(find '/tmp' -type 'f' -name 'configure')"
 
