@@ -81,6 +81,8 @@ if ! [ -f "${gmp_tarball}" ]; then
 		--directory="$(dirname "${gmp_directory}")" \
 		--extract \
 		--file="${gmp_tarball}"
+	
+	patch --directory="${gmp_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Remove-hardcoded-RPATH-and-versioned-SONAME-from-libgmp.patch"
 fi
 
 if ! [ -f "${mpfr_tarball}" ]; then
@@ -98,6 +100,8 @@ if ! [ -f "${mpfr_tarball}" ]; then
 		--directory="$(dirname "${mpfr_directory}")" \
 		--extract \
 		--file="${mpfr_tarball}"
+	
+	patch --directory="${mpfr_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Remove-hardcoded-RPATH-and-versioned-SONAME-from-libmpfr.patch"
 fi
 
 if ! [ -f "${mpc_tarball}" ]; then
@@ -115,6 +119,8 @@ if ! [ -f "${mpc_tarball}" ]; then
 		--directory="$(dirname "${mpc_directory}")" \
 		--extract \
 		--file="${mpc_tarball}"
+	
+	patch --directory="${mpc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Remove-hardcoded-RPATH-and-versioned-SONAME-from-libmpc.patch"
 fi
 
 if ! [ -f "${isl_tarball}" ]; then
@@ -132,6 +138,25 @@ if ! [ -f "${isl_tarball}" ]; then
 		--directory="$(dirname "${isl_directory}")" \
 		--extract \
 		--file="${isl_tarball}"
+	
+	patch --directory="${isl_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Remove-hardcoded-RPATH-and-versioned-SONAME-from-libisl.patch"
+fi
+
+if ! [ -f "${zstd_tarball}" ]; then
+	curl \
+		--url 'https://github.com/facebook/zstd/archive/refs/heads/dev.tar.gz' \
+		--retry '30' \
+		--retry-all-errors \
+		--retry-delay '0' \
+		--retry-max-time '0' \
+		--location \
+		--silent \
+		--output "${zstd_tarball}"
+	
+	tar \
+		--directory="$(dirname "${zstd_directory}")" \
+		--extract \
+		--file="${zstd_tarball}"
 fi
 
 if ! [ -f "${binutils_tarball}" ]; then
@@ -153,23 +178,10 @@ if ! [ -f "${binutils_tarball}" ]; then
 	for name in "${serenity_directory}/Ports/binutils/patches/"*'.patch'; do
 		patch --input="$(realpath "${name}")" --strip=1 --directory="${binutils_directory}"
 	done
-fi
-
-if ! [ -f "${zstd_tarball}" ]; then
-	curl \
-		--url 'https://github.com/facebook/zstd/archive/refs/heads/dev.tar.gz' \
-		--retry '30' \
-		--retry-all-errors \
-		--retry-delay '0' \
-		--retry-max-time '0' \
-		--location \
-		--silent \
-		--output "${zstd_tarball}"
 	
-	tar \
-		--directory="$(dirname "${zstd_directory}")" \
-		--extract \
-		--file="${zstd_tarball}"
+	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Revert-gold-Use-char16_t-char32_t-instead-of-uint16_.patch"
+	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Disable-annoying-linker-warnings.patch"
+	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-binutils-host-tools.patch"
 fi
 
 if ! [ -f "${gcc_tarball}" ]; then
@@ -193,11 +205,33 @@ if ! [ -f "${gcc_tarball}" ]; then
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Turn-Wimplicit-int-back-into-an-warning.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Turn-Wint-conversion-back-into-an-warning.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Revert-GCC-change-about-turning-Wimplicit-function-d.patch"
+	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-GCC-host-tools.patch"
 	
 	for name in "${serenity_directory}/Ports/gcc/patches/"*'.patch'; do
 		patch --input="$(realpath "${name}")" --strip=1 --directory="${gcc_directory}"
 	done
 fi
+
+# Follow Debian's approach for removing hardcoded RPATH from binaries
+# https://wiki.debian.org/RpathIssue
+sed \
+	--in-place \
+	--regexp-extended \
+	's/(hardcode_into_libs)=.*$/\1=no/' \
+	"${isl_directory}/configure" \
+	"${mpc_directory}/configure" \
+	"${mpfr_directory}/configure" \
+	"${gmp_directory}/configure" \
+	"${gcc_directory}/libsanitizer/configure"
+
+# Fix Autotools mistakenly detecting shared libraries as not supported
+while read file; do
+	sed \
+		--in-place \
+		--regexp-extended \
+		's/(ld_shlibs_CXX)=.*$/\1=yes/' \
+		"${file}"
+done <<< "$(find '/tmp' -type 'f' -name 'configure')"
 
 [ -d "${gmp_directory}/build" ] || mkdir "${gmp_directory}/build"
 
@@ -283,7 +317,8 @@ cmake \
 	-DBUILD_SHARED_LIBS=ON \
 	-DZSTD_BUILD_PROGRAMS=OFF \
 	-DZSTD_BUILD_TESTS=OFF \
-	-DZSTD_BUILD_STATIC=OFF
+	-DZSTD_BUILD_STATIC=OFF \
+	-DCMAKE_PLATFORM_NO_VERSIONED_SONAME=ON
 
 cmake --build "${PWD}"
 cmake --install "${PWD}" --strip
@@ -302,11 +337,11 @@ for triplet in "${triplets[@]}"; do
 		--enable-ld \
 		--enable-lto \
 		--disable-gprofng \
-		--with-static-standard-libraries \
 		--with-sysroot="${toolchain_directory}/${triplet}" \
 		--with-zstd="${toolchain_directory}" \
-		CFLAGS="${optflags} -I${toolchain_directory}/include" \
-		CXXFLAGS="${optflags} -I${toolchain_directory}/include" \
+		--without-static-standard-libraries \
+		CFLAGS="${optflags} -I${toolchain_directory}/include -L${toolchain_directory}/lib" \
+		CXXFLAGS="${optflags} -I${toolchain_directory}/include -L${toolchain_directory}/lib" \
 		LDFLAGS="${linkflags}"
 	
 	make all --jobs
@@ -354,10 +389,9 @@ for triplet in "${triplets[@]}"; do
 		--with-mpfr="${toolchain_directory}" \
 		--with-isl="${toolchain_directory}" \
 		--with-zstd="${toolchain_directory}" \
-		--with-static-standard-libraries \
 		--with-bugurl='https://github.com/AmanoTeam/Senna/issues' \
 		--with-gcc-major-version-only \
-		--with-pkgversion="Senna v0.3-${revision}" \
+		--with-pkgversion="Senna v0.4-${revision}" \
 		--with-sysroot="${toolchain_directory}/${triplet}" \
 		--with-native-system-header-dir='/include' \
 		--with-default-libstdcxx-abi='new' \
@@ -397,7 +431,9 @@ for triplet in "${triplets[@]}"; do
 		--disable-libstdcxx-pch \
 		--disable-werror \
 		--disable-nls \
+		--disable-fixincludes \
 		--without-headers \
+		--without-static-standard-libraries \
 		CFLAGS="${optflags}" \
 		CXXFLAGS="${optflags}" \
 		LDFLAGS="${linkflags}"
@@ -414,13 +450,39 @@ for triplet in "${triplets[@]}"; do
 	if ! [ -f './liblto_plugin.so' ]; then
 		ln --symbolic "../../libexec/gcc/${triplet}/"*'/liblto_plugin.so' './'
 	fi
-	
-	rm --recursive "${toolchain_directory}/share"
-	
-	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${triplet}/"*'/cc1'
-	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${triplet}/"*'/cc1plus'
-	patchelf --add-rpath '$ORIGIN/../../../../lib' "${toolchain_directory}/libexec/gcc/${triplet}/"*'/lto1'
 done
+
+# Delete libtool files and other unnecessary files GCC installs
+rm --force --recursive "${toolchain_directory}/share"
+
+find \
+	"${toolchain_directory}" \
+	-name '*.la' -delete -o \
+	-name '*.py' -delete -o \
+	-name '*.json' -delete
+
+declare cc='gcc'
+declare readelf='readelf'
+
+if ! (( is_native )); then
+	cc="${CC}"
+	readelf="${READELF}"
+fi
+
+# Bundle both libstdc++ and libgcc within host tools
+if ! (( is_native )); then
+	[ -d "${toolchain_directory}/lib" ] || mkdir "${toolchain_directory}/lib"
+	
+	declare name=$(realpath $("${cc}" --print-file-name='libstdc++.so'))
+	declare soname=$("${readelf}" -d "${name}" | grep 'SONAME' | sed --regexp-extended 's/.+\[(.+)\]/\1/g')
+	
+	cp "${name}" "${toolchain_directory}/lib/${soname}"
+	
+	declare name=$(realpath $("${cc}" --print-file-name='libgcc_s.so.1'))
+	declare soname=$("${readelf}" -d "${name}" | grep 'SONAME' | sed --regexp-extended 's/.+\[(.+)\]/\1/g')
+	
+	cp "${name}" "${toolchain_directory}/lib/${soname}"
+fi
 
 mkdir --parent "${share_directory}"
 
