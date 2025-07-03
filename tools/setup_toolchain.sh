@@ -2,11 +2,11 @@
 
 set -eu
 
-declare -r SENNA_TOOLCHAIN='/tmp/senna-toolchain'
+declare -r SENNA_HOME='/tmp/senna-toolchain'
 
-if [ -d "${SENNA_TOOLCHAIN}" ]; then
-	PATH+=":${SENNA_TOOLCHAIN}/bin"
-	export SENNA_TOOLCHAIN \
+if [ -d "${SENNA_HOME}" ]; then
+	PATH+=":${SENNA_HOME}/bin"
+	export SENNA_HOME \
 		PATH
 	return 0
 fi
@@ -20,9 +20,9 @@ tar --directory="$(dirname "${SENNA_CROSS_TARBALL}")" --extract --file="${SENNA_
 
 rm "${SENNA_CROSS_TARBALL}"
 
-mv '/tmp/senna' "${SENNA_TOOLCHAIN}"
+mv '/tmp/senna' "${SENNA_HOME}"
 
-PATH+=":${SENNA_TOOLCHAIN}/bin"
+PATH+=":${SENNA_HOME}/bin"
 
-export SENNA_TOOLCHAIN \
+export SENNA_HOME \
 	PATH
