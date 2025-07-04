@@ -229,7 +229,7 @@ while read file; do
 	sed \
 		--in-place \
 		--regexp-extended \
-		's/(ld_shlibs_CXX)=no/\1=yes/; s/(can_build_shared)=no/\1=yes/' \
+		's/(ld_shlibs_CXX)=no/\1=yes/; s/(can_build_shared)=no/\1=yes/; s/soname_spec=$/soname_spec=\'$libname$release$shared_ext$major\'/' \
 		"${file}"
 done <<< "$(find '/tmp' -type 'f' -name 'configure')"
 
