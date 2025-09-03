@@ -1,0 +1,30 @@
+From ecb56245f2c8596e6838306b741e11bcfc4cd70b Mon Sep 17 00:00:00 2001
+From: Kartatz <105828205+Kartatz@users.noreply.github.com>
+Date: Wed, 3 Sep 2025 21:53:11 -0300
+Subject: [PATCH] Explicitly include <sys/select.h>
+
+Fixes build errors when compiling on SerenityOS:
+
+../../libcc1/connection.cc: In member function 'cc1_plugin::status cc1_plugin::connection::do_wait(bool)':
+../../libcc1/connection.cc:79:18: error: 'select' was not declared in this scope
+   79 |       int nfds = select (FD_SETSIZE, &read_set, NULL, NULL, NULL);
+      |                  ^~~~~~
+---
+ libcc1/connection.cc | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/libcc1/connection.cc b/libcc1/connection.cc
+index adfc46765..1a759f56b 100644
+--- a/libcc1/connection.cc
++++ b/libcc1/connection.cc
+@@ -21,6 +21,7 @@ along with GCC; see the file COPYING3.  If not see
+ #include <string>
+ #include <unistd.h>
+ #include <sys/types.h>
++#include <sys/select.h>
+ #include <string.h>
+ #include <errno.h>
+ #include "marshall.hh"
+-- 
+2.50.1
+

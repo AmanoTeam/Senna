@@ -24,10 +24,13 @@ declare -r isl_tarball='/tmp/isl.tar.xz'
 declare -r isl_directory='/tmp/isl-0.27'
 
 declare -r binutils_tarball='/tmp/binutils.tar.xz'
-declare -r binutils_directory='/tmp/binutils-with-gold-2.44'
+declare -r binutils_directory='/tmp/binutils-2.45'
 
 declare -r gcc_tarball='/tmp/gcc.tar.xz'
 declare -r gcc_directory='/tmp/gcc-releases-gcc-15'
+
+declare -r zlib_tarball='/tmp/zlib.tar.gz'
+declare -r zlib_directory='/tmp/zlib-develop'
 
 declare -r zstd_tarball='/tmp/zstd.tar.gz'
 declare -r zstd_directory='/tmp/zstd-dev'
@@ -37,7 +40,7 @@ declare -r serenity_directory="${workdir}/submodules/serenity"
 declare -r max_jobs='30'
 
 declare -r pieflags='-fPIE'
-declare -r optflags='-w -O2'
+declare -r ccflags='-w -O2'
 declare -r linkflags='-Xlinker -s'
 
 declare -ra triplets=(
@@ -164,6 +167,25 @@ if ! [ -f "${isl_tarball}" ]; then
 	patch --directory="${isl_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Remove-hardcoded-RPATH-and-versioned-SONAME-from-libisl.patch"
 fi
 
+if ! [ -f "${zlib_tarball}" ]; then
+	curl \
+		--url 'https://github.com/madler/zlib/archive/refs/heads/develop.tar.gz' \
+		--retry '30' \
+		--retry-all-errors \
+		--retry-delay '0' \
+		--retry-max-time '0' \
+		--location \
+		--silent \
+		--output "${zlib_tarball}"
+	
+	tar \
+		--directory="$(dirname "${zlib_directory}")" \
+		--extract \
+		--file="${zlib_tarball}"
+	
+	patch --directory="${zlib_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Remove-versioned-SONAME-from-libz.patch"
+fi
+
 if ! [ -f "${zstd_tarball}" ]; then
 	curl \
 		--url 'https://github.com/facebook/zstd/archive/refs/heads/dev.tar.gz' \
@@ -183,7 +205,7 @@ fi
 
 if ! [ -f "${binutils_tarball}" ]; then
 	curl \
-		--url 'https://mirrors.kernel.org/gnu/binutils/binutils-with-gold-2.44.tar.xz' \
+		--url 'https://mirrors.kernel.org/gnu/binutils/binutils-2.45.tar.xz' \
 		--retry '30' \
 		--retry-all-errors \
 		--retry-delay '0' \
@@ -201,9 +223,8 @@ if ! [ -f "${binutils_tarball}" ]; then
 		patch --input="$(realpath "${name}")" --strip=1 --directory="${binutils_directory}"
 	done
 	
-	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Revert-gold-Use-char16_t-char32_t-instead-of-uint16_.patch"
-	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Disable-annoying-linker-warnings.patch"
 	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-binutils-host-tools.patch"
+	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Don-t-warn-about-local-symbols-within-the-globals.patch"
 fi
 
 if ! [ -f "${gcc_tarball}" ]; then
@@ -230,6 +251,8 @@ if ! [ -f "${gcc_tarball}" ]; then
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-GCC-host-tools.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Add-ARM-and-ARM64-drivers-to-OpenBSD-host-tools.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Fix-missing-stdint.h-include-when-compiling-host-tools-on-OpenBSD.patch"
+	
+	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/patches/0001-Explicitly-include-sys-select.h.patch"
 	
 	for name in "${serenity_directory}/Ports/gcc/patches/"*'.patch'; do
 		patch --input="$(realpath "${name}")" --strip=1 --directory="${gcc_directory}"
@@ -274,8 +297,8 @@ rm --force --recursive ./*
 	--prefix="${toolchain_directory}" \
 	--enable-shared \
 	--disable-static \
-	CFLAGS="${optflags}" \
-	CXXFLAGS="${optflags}" \
+	CFLAGS="${ccflags}" \
+	CXXFLAGS="${ccflags}" \
 	LDFLAGS="${linkflags}"
 
 make all --jobs
@@ -292,8 +315,8 @@ rm --force --recursive ./*
 	--with-gmp="${toolchain_directory}" \
 	--enable-shared \
 	--disable-static \
-	CFLAGS="${optflags}" \
-	CXXFLAGS="${optflags}" \
+	CFLAGS="${ccflags}" \
+	CXXFLAGS="${ccflags}" \
 	LDFLAGS="${linkflags}"
 
 make all --jobs
@@ -310,8 +333,8 @@ rm --force --recursive ./*
 	--with-gmp="${toolchain_directory}" \
 	--enable-shared \
 	--disable-static \
-	CFLAGS="${optflags}" \
-	CXXFLAGS="${optflags}" \
+	CFLAGS="${ccflags}" \
+	CXXFLAGS="${ccflags}" \
 	LDFLAGS="${linkflags}"
 
 make all --jobs
@@ -328,12 +351,29 @@ rm --force --recursive ./*
 	--with-gmp-prefix="${toolchain_directory}" \
 	--enable-shared \
 	--disable-static \
-	CFLAGS="${pieflags} ${optflags}" \
-	CXXFLAGS="${pieflags} ${optflags}" \
+	CFLAGS="${pieflags} ${ccflags}" \
+	CXXFLAGS="${pieflags} ${ccflags}" \
 	LDFLAGS="-Xlinker -rpath-link -Xlinker ${toolchain_directory}/lib ${linkflags}"
 
 make all --jobs
 make install
+
+[ -d "${zlib_directory}/build" ] || mkdir "${zlib_directory}/build"
+
+cd "${zlib_directory}/build"
+rm --force --recursive ./*
+
+../configure \
+	--host="${CROSS_COMPILE_TRIPLET}" \
+	--prefix="${toolchain_directory}" \
+	CFLAGS="${ccflags}" \
+	CXXFLAGS="${ccflags}" \
+	LDFLAGS="${linkflags}"
+
+make all --jobs
+make install
+
+unlink "${toolchain_directory}/lib/libz.a"
 
 [ -d "${zstd_directory}/.build" ] || mkdir "${zstd_directory}/.build"
 
@@ -343,7 +383,7 @@ rm --force --recursive ./*
 cmake \
 	-S "${zstd_directory}/build/cmake" \
 	-B "${PWD}" \
-	-DCMAKE_C_FLAGS="-DZDICT_QSORT=ZDICT_QSORT_MIN ${optflags}" \
+	-DCMAKE_C_FLAGS="-DZDICT_QSORT=ZDICT_QSORT_MIN ${ccflags}" \
 	-DCMAKE_INSTALL_PREFIX="${toolchain_directory}" \
 	-DBUILD_SHARED_LIBS=ON \
 	-DZSTD_BUILD_PROGRAMS=OFF \
@@ -359,13 +399,24 @@ cp "${workdir}/submodules/obggcc/tools/ln.sh" '/tmp/ln'
 
 export PATH="/tmp:${PATH}"
 
-# The gold linker build incorrectly detects ffsll() as unsupported.
-if [[ "${CROSS_COMPILE_TRIPLET}" == *'-android'* ]]; then
-	export ac_cv_func_ffsll=yes
+if [[ "${CROSS_COMPILE_TRIPLET}" == 'arm'*'-android'* ]]; then
+	export \
+		ac_cv_func_fseeko='no' \
+		ac_cv_func_ftello='no'
+fi
+
+if [[ "${CROSS_COMPILE_TRIPLET}" == *'-haiku' ]]; then
+	export ac_cv_c_bigendian='no'
 fi
 
 for triplet in "${triplets[@]}"; do
 	declare extra_configure_flags=''
+	
+	declare specs="%{!ftrivial-auto-var-init*:-ftrivial-auto-var-init=zero}"
+	
+	if [ "${triplet}" = 'x86_64-unknown-serenity' ]; then
+		declare specs+=' %{!fno-plt:%{!fplt:-fno-plt}}'
+	fi
 	
 	[ -d "${binutils_directory}/build" ] || mkdir "${binutils_directory}/build"
 	
@@ -389,10 +440,10 @@ for triplet in "${triplets[@]}"; do
 		--without-static-standard-libraries \
 		--with-sysroot="${toolchain_directory}/${triplet}" \
 		--with-zstd="${toolchain_directory}" \
-		--without-static-standard-libraries \
-		CFLAGS="${optflags} -I${toolchain_directory}/include -L${toolchain_directory}/lib" \
-		CXXFLAGS="${optflags} -I${toolchain_directory}/include -L${toolchain_directory}/lib" \
-		LDFLAGS="${linkflags}"
+		--with-system-zlib \
+		CFLAGS="-I${toolchain_directory}/include ${ccflags}" \
+		CXXFLAGS="-I${toolchain_directory}/include ${ccflags}" \
+		LDFLAGS="-L${toolchain_directory}/lib ${linkflags}"
 	
 	make all --jobs
 	make install
@@ -435,8 +486,8 @@ for triplet in "${triplets[@]}"; do
 	cd "${gcc_directory}/build"
 	rm --force --recursive ./*
 	
-	declare cflags_for_target="${optflags} ${linkflags}"
-	declare cxxflags_for_target="${optflags} ${linkflags}"
+	declare cflags_for_target="${ccflags} ${linkflags}"
+	declare cxxflags_for_target="${ccflags} ${linkflags}"
 	
 	../configure \
 		--host="${CROSS_COMPILE_TRIPLET}" \
@@ -448,9 +499,10 @@ for triplet in "${triplets[@]}"; do
 		--with-mpfr="${toolchain_directory}" \
 		--with-isl="${toolchain_directory}" \
 		--with-zstd="${toolchain_directory}" \
+		--with-system-zlib \
 		--with-bugurl='https://github.com/AmanoTeam/Senna/issues' \
 		--with-gcc-major-version-only \
-		--with-pkgversion="Senna v0.4-${revision}" \
+		--with-pkgversion="Senna v0.5-${revision}" \
 		--with-sysroot="${toolchain_directory}/${triplet}" \
 		--with-native-system-header-dir='/include' \
 		--with-default-libstdcxx-abi='new' \
@@ -481,7 +533,9 @@ for triplet in "${triplets[@]}"; do
 		--enable-host-shared \
 		--enable-host-bind-now \
 		--enable-initfini-array \
-		--with-specs='%{!fno-plt:%{!fplt:-fno-plt}}' \
+		--enable-libgomp \
+		--with-specs="${specs}" \
+		--disable-c++-tools \
 		--disable-libsanitizer \
 		--disable-libgomp \
 		--disable-bootstrap \
@@ -492,9 +546,9 @@ for triplet in "${triplets[@]}"; do
 		--disable-fixincludes \
 		--without-headers \
 		--without-static-standard-libraries \
-		CFLAGS="${optflags}" \
-		CXXFLAGS="${optflags}" \
-		LDFLAGS="${linkflags}"
+		CFLAGS="${ccflags}" \
+		CXXFLAGS="${ccflags}" \
+		LDFLAGS="-L${toolchain_directory}/lib ${linkflags}"
 	
 	declare args=''
 	
@@ -505,6 +559,7 @@ for triplet in "${triplets[@]}"; do
 	env ${args} make \
 		CFLAGS_FOR_TARGET="${cflags_for_target}" \
 		CXXFLAGS_FOR_TARGET="${cxxflags_for_target}" \
+		gcc_cv_objdump="${CROSS_COMPILE_TRIPLET}-objdump" \
 		all \
 		--jobs="${max_jobs}"
 	make install
@@ -514,6 +569,8 @@ for triplet in "${triplets[@]}"; do
 	cd "${toolchain_directory}/${triplet}/lib64" 2>/dev/null || cd "${toolchain_directory}/${triplet}/lib"
 	
 	[ -f './libiberty.a' ] && unlink './libiberty.a'
+	
+	unlink './libgcc_s.so' && echo 'GROUP ( libgcc_s.so.1 -lgcc )' > './libgcc_s.so'
 	
 	cd "${toolchain_directory}/lib/bfd-plugins"
 	
@@ -582,3 +639,11 @@ fi
 mkdir --parent "${share_directory}"
 
 cp --recursive "${workdir}/tools/dev/"* "${share_directory}"
+
+[ -d "${toolchain_directory}/build" ] || mkdir "${toolchain_directory}/build"
+
+ln \
+	--symbolic \
+	--relative \
+	"${share_directory}/"* \
+	"${toolchain_directory}/build"
