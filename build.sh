@@ -249,6 +249,8 @@ if ! [ -f "${gcc_tarball}" ]; then
 		--extract \
 		--file="${gcc_tarball}"
 	
+	mv /tmp/gcc-* $gcc_directory
+	
 	if [[ "${CROSS_COMPILE_TRIPLET}" = *'-darwin'* ]]; then
 		sed \
 			--in-place \
