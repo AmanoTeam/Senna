@@ -24,7 +24,7 @@ declare -r isl_tarball='/tmp/isl.tar.xz'
 declare -r isl_directory='/tmp/isl-0.27'
 
 declare -r binutils_tarball='/tmp/binutils.tar.xz'
-declare -r binutils_directory='/tmp/binutils-2.45'
+declare -r binutils_directory='/tmp/binutils'
 
 declare -r gcc_tarball='/tmp/gcc.tar.xz'
 declare -r gcc_directory='/tmp/gcc-releases-gcc-15'
@@ -205,7 +205,7 @@ fi
 
 if ! [ -f "${binutils_tarball}" ]; then
 	curl \
-		--url 'https://mirrors.kernel.org/gnu/binutils/binutils-2.45.tar.xz' \
+		--url 'https://github.com/AmanoTeam/binutils-snapshots/releases/latest/download/binutils.tar.xz' \
 		--retry '30' \
 		--retry-all-errors \
 		--retry-delay '0' \
@@ -223,7 +223,13 @@ if ! [ -f "${binutils_tarball}" ]; then
 		patch --input="$(realpath "${name}")" --strip=1 --directory="${binutils_directory}"
 	done
 	
-	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-binutils-host-tools.patch"
+	if [[ "${CROSS_COMPILE_TRIPLET}" = *'-darwin'* ]]; then
+		sed \
+			--in-place \
+			's/$$ORIGIN/@loader_path/g' \
+			"${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-binutils-host-tools.patch"
+	fi
+	
 	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Don-t-warn-about-local-symbols-within-the-globals.patch"
 fi
 
@@ -243,11 +249,19 @@ if ! [ -f "${gcc_tarball}" ]; then
 		--extract \
 		--file="${gcc_tarball}"
 	
+	if [[ "${CROSS_COMPILE_TRIPLET}" = *'-darwin'* ]]; then
+		sed \
+			--in-place \
+			's/$$ORIGIN/@loader_path/g' \
+			"${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-GCC-host-tools.patch"
+	fi
+	
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Fix-libgcc-build-on-arm.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Change-the-default-language-version-for-C-compilatio.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Turn-Wimplicit-int-back-into-an-warning.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Turn-Wint-conversion-back-into-an-warning.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Revert-GCC-change-about-turning-Wimplicit-function-d.patch"
+	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Turn-Wincompatible-pointer-types-back-into-an-warnin.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-GCC-host-tools.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Add-ARM-and-ARM64-drivers-to-OpenBSD-host-tools.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Fix-missing-stdint.h-include-when-compiling-host-tools-on-OpenBSD.patch"
@@ -259,7 +273,7 @@ if ! [ -f "${gcc_tarball}" ]; then
 	done
 fi
 
-# Follow Debian's approach for removing hardcoded RPATH from binaries
+# Follow Debian's approach to remove hardcoded RPATHs from binaries
 # https://wiki.debian.org/RpathIssue
 sed \
 	--in-place \
@@ -270,6 +284,15 @@ sed \
 	"${mpfr_directory}/configure" \
 	"${gmp_directory}/configure" \
 	"${gcc_directory}/libsanitizer/configure"
+
+# Avoid using absolute hardcoded install_name values on macOS
+sed \
+	--in-place \
+	's|-install_name \\$rpath/\\$soname|-install_name @rpath/\\$soname|g' \
+	"${isl_directory}/configure" \
+	"${mpc_directory}/configure" \
+	"${mpfr_directory}/configure" \
+	"${gmp_directory}/configure"
 
 # Fix Autotools mistakenly detecting shared libraries as not supported on OpenBSD
 while read file; do
@@ -345,6 +368,12 @@ make install
 cd "${isl_directory}/build"
 rm --force --recursive ./*
 
+declare isl_extra_ldflags=''
+
+if [[ "${CROSS_COMPILE_TRIPLET}" != *'-darwin'* ]]; then
+	isl_extra_ldflags+=" -Xlinker -rpath-link -Xlinker ${toolchain_directory}/lib"
+fi
+
 ../configure \
 	--host="${CROSS_COMPILE_TRIPLET}" \
 	--prefix="${toolchain_directory}" \
@@ -353,7 +382,7 @@ rm --force --recursive ./*
 	--disable-static \
 	CFLAGS="${pieflags} ${ccflags}" \
 	CXXFLAGS="${pieflags} ${ccflags}" \
-	LDFLAGS="-Xlinker -rpath-link -Xlinker ${toolchain_directory}/lib ${linkflags}"
+	LDFLAGS="${linkflags} ${isl_extra_ldflags}"
 
 make all --jobs
 make install
@@ -380,9 +409,16 @@ unlink "${toolchain_directory}/lib/libz.a"
 cd "${zstd_directory}/.build"
 rm --force --recursive ./*
 
+declare cmake_flags=''
+
+if [[ "${CROSS_COMPILE_TRIPLET}" = *'-darwin'* ]]; then
+	cmake_flags+=' -DCMAKE_SYSTEM_NAME=Darwin'
+fi
+
 cmake \
 	-S "${zstd_directory}/build/cmake" \
 	-B "${PWD}" \
+	${cmake_flags} \
 	-DCMAKE_C_FLAGS="-DZDICT_QSORT=ZDICT_QSORT_MIN ${ccflags}" \
 	-DCMAKE_INSTALL_PREFIX="${toolchain_directory}" \
 	-DBUILD_SHARED_LIBS=ON \
@@ -399,20 +435,24 @@ cp "${workdir}/submodules/obggcc/tools/ln.sh" '/tmp/ln'
 
 export PATH="/tmp:${PATH}"
 
-if [[ "${CROSS_COMPILE_TRIPLET}" == 'arm'*'-android'* ]]; then
+if [[ "${CROSS_COMPILE_TRIPLET}" = 'arm'*'-android'* ]] || [[ "${CROSS_COMPILE_TRIPLET}" = 'i686-'*'-android'* ]] || [[ "${CROSS_COMPILE_TRIPLET}" = 'mipsel-'*'-android'* ]]; then
 	export \
 		ac_cv_func_fseeko='no' \
 		ac_cv_func_ftello='no'
 fi
 
-if [[ "${CROSS_COMPILE_TRIPLET}" == *'-haiku' ]]; then
+if [[ "${CROSS_COMPILE_TRIPLET}" = 'armv5'*'-android'* ]]; then
+	export PINO_ARM_MODE='true'
+fi
+
+if [[ "${CROSS_COMPILE_TRIPLET}" = *'-haiku' ]]; then
 	export ac_cv_c_bigendian='no'
 fi
 
 for triplet in "${triplets[@]}"; do
 	declare extra_configure_flags=''
 	
-	declare specs="%{!ftrivial-auto-var-init*:-ftrivial-auto-var-init=zero}"
+	declare specs='%{!Qy:-Qn}'
 	
 	if [ "${triplet}" = 'x86_64-unknown-serenity' ]; then
 		declare specs+=' %{!fno-plt:%{!fplt:-fno-plt}}'
@@ -427,7 +467,7 @@ for triplet in "${triplets[@]}"; do
 		--host="${CROSS_COMPILE_TRIPLET}" \
 		--target="${triplet}" \
 		--prefix="${toolchain_directory}" \
-		--enable-gold \
+		--disable-gold \
 		--enable-ld \
 		--enable-lto \
 		--enable-separate-code \
@@ -477,7 +517,11 @@ for triplet in "${triplets[@]}"; do
 		extra_configure_flags+=" --with-toolexeclibdir=${toolchain_directory}/${triplet}/lib/"
 	fi
 	
-	if [[ "${CROSS_COMPILE_TRIPLET}" == *'-haiku'* ]]; then
+	if [[ "${CROSS_COMPILE_TRIPLET}" != *'-darwin'* ]]; then
+		extra_configure_flags+=' --enable-host-bind-now'
+	fi
+	
+	if [[ "${CROSS_COMPILE_TRIPLET}" = *'-haiku'* ]]; then
 		extra_configure_flags+=" --disable-c++-tools"
 	fi
 	
@@ -531,7 +575,6 @@ for triplet in "${triplets[@]}"; do
 		--enable-cxx-flags="${linkflags}" \
 		--enable-host-pie \
 		--enable-host-shared \
-		--enable-host-bind-now \
 		--enable-initfini-array \
 		--enable-libgomp \
 		--with-specs="${specs}" \
@@ -605,7 +648,7 @@ if ! (( is_native )); then
 fi
 
 # Bundle both libstdc++ and libgcc within host tools
-if ! (( is_native )); then
+if ! (( is_native )) && [[ "${CROSS_COMPILE_TRIPLET}" != *'-darwin'* ]]; then
 	[ -d "${toolchain_directory}/lib" ] || mkdir "${toolchain_directory}/lib"
 	
 	# libstdc++

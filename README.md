@@ -12,4 +12,4 @@ The current release targets SerenityOS on the `x86_64`, `aarch64` and `riscv64` 
 
 ## Releases
 
-You can obtain releases from the [releases](https://github.com/AmanoTeam/Senna/releases) page. There are precompiled binaries for most platforms except macOS and Windows.
+You can obtain releases from the [releases](https://github.com/AmanoTeam/Senna/releases) page. There are precompiled binaries for most platforms except Windows.
