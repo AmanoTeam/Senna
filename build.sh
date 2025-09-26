@@ -269,7 +269,7 @@ if ! [ -f "${gcc_tarball}" ]; then
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/patches/0001-Explicitly-include-sys-select.h.patch"
 	
 	for name in "${serenity_directory}/Ports/gcc/patches/"*'.patch'; do
-		patch --input="$(realpath "${name}")" --strip=1 --directory="${gcc_directory}"
+		patch --input="$(realpath "${name}")" --strip=1 --directory="${gcc_directory}" || true
 	done
 fi
 
