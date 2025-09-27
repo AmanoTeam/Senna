@@ -235,7 +235,7 @@ fi
 
 if ! [ -f "${gcc_tarball}" ]; then
 	curl \
-		--url 'https://github.com/gcc-mirror/gcc/archive/d0ab89f8d25358d829e82ba920469422791f8797.tar.gz' \
+		--url 'https://github.com/gcc-mirror/gcc/archive/releases/gcc-15.tar.gz' \
 		--retry '30' \
 		--retry-all-errors \
 		--retry-delay '0' \
@@ -248,8 +248,6 @@ if ! [ -f "${gcc_tarball}" ]; then
 		--directory="$(dirname "${gcc_directory}")" \
 		--extract \
 		--file="${gcc_tarball}"
-	
-	mv /tmp/gcc-* $gcc_directory
 	
 	if [[ "${CROSS_COMPILE_TRIPLET}" = *'-darwin'* ]]; then
 		sed \
@@ -370,10 +368,10 @@ make install
 cd "${isl_directory}/build"
 rm --force --recursive ./*
 
-declare isl_extra_ldflags=''
+declare isl_ldflags=''
 
 if [[ "${CROSS_COMPILE_TRIPLET}" != *'-darwin'* ]]; then
-	isl_extra_ldflags+=" -Xlinker -rpath-link -Xlinker ${toolchain_directory}/lib"
+	isl_ldflags+=" -Xlinker -rpath-link -Xlinker ${toolchain_directory}/lib"
 fi
 
 ../configure \
@@ -384,7 +382,7 @@ fi
 	--disable-static \
 	CFLAGS="${pieflags} ${ccflags}" \
 	CXXFLAGS="${pieflags} ${ccflags}" \
-	LDFLAGS="${linkflags} ${isl_extra_ldflags}"
+	LDFLAGS="${linkflags} ${isl_ldflags}"
 
 make all --jobs
 make install
