@@ -235,7 +235,7 @@ fi
 
 if ! [ -f "${gcc_tarball}" ]; then
 	curl \
-		--url 'https://github.com/gcc-mirror/gcc/archive/be6142b9edfe1e496b7e5f2be0eeb438ef7d3050.tar.gz' \
+		--url 'https://github.com/gcc-mirror/gcc/archive/b9a1f1ffa886e107a9e275b3ba001ed76bb33ad7.tar.gz' \
 		--retry '30' \
 		--retry-all-errors \
 		--retry-delay '0' \
