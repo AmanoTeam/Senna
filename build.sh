@@ -235,7 +235,7 @@ fi
 
 if ! [ -f "${gcc_tarball}" ]; then
 	curl \
-		--url 'https://github.com/gcc-mirror/gcc/archive/b9a1f1ffa886e107a9e275b3ba001ed76bb33ad7.tar.gz' \
+		--url 'https://github.com/gcc-mirror/gcc/archive/releases/gcc-15.tar.gz' \
 		--retry '30' \
 		--retry-all-errors \
 		--retry-delay '0' \
@@ -248,7 +248,7 @@ if ! [ -f "${gcc_tarball}" ]; then
 		--directory="$(dirname "${gcc_directory}")" \
 		--extract \
 		--file="${gcc_tarball}"
-	mv /tmp/gcc-* $gcc_directory
+	
 	if [[ "${CROSS_COMPILE_TRIPLET}" = *'-darwin'* ]]; then
 		sed \
 			--in-place \
