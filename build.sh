@@ -219,10 +219,6 @@ if ! [ -f "${binutils_tarball}" ]; then
 		--extract \
 		--file="${binutils_tarball}"
 	
-	for name in "${serenity_directory}/Ports/binutils/patches/"*'.patch'; do
-		patch --input="$(realpath "${name}")" --strip=1 --directory="${binutils_directory}"
-	done
-	
 	if [[ "${CROSS_COMPILE_TRIPLET}" = *'-darwin'* ]]; then
 		sed \
 			--in-place \
@@ -230,6 +226,7 @@ if ! [ -f "${binutils_tarball}" ]; then
 			"${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-binutils-host-tools.patch"
 	fi
 	
+	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/patches/0001-Binutils.patch"
 	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Don-t-warn-about-local-symbols-within-the-globals.patch"
 fi
 
@@ -256,6 +253,9 @@ if ! [ -f "${gcc_tarball}" ]; then
 			"${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-GCC-host-tools.patch"
 	fi
 	
+	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/patches/0001-GCC-15.patch"
+	
+	
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Turn-Wimplicit-function-declaration-back-into-an-warning.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0002-Fix-libsanitizer-build-on-older-platforms.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0003-Change-the-default-language-version-for-C-compilation-from-std-gnu23-to-std-gnu17.patch"
@@ -268,9 +268,7 @@ if ! [ -f "${gcc_tarball}" ]; then
 	
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/patches/0001-Explicitly-include-sys-select.h.patch"
 	
-	for name in "${serenity_directory}/Ports/gcc/patches/"*'.patch'; do
-		patch --input="$(realpath "${name}")" --strip=1 --directory="${gcc_directory}" || true
-	done
+	
 fi
 
 # Follow Debian's approach to remove hardcoded RPATHs from binaries

@@ -1,0 +1,495 @@
+From 7e0208162d5cdabeeada0a80ed6f4f000ca969dd Mon Sep 17 00:00:00 2001
+From: Kartatz <105828205+Kartatz@users.noreply.github.com>
+Date: Thu, 11 Dec 2025 02:37:10 -0300
+Subject: [PATCH] Binutils
+
+---
+ bfd/config.bfd                                | 10 +++++++++
+ bfd/elflink.c                                 | 12 +++++-----
+ gas/config/tc-i386.c                          |  3 ++-
+ gas/config/te-serenity.h                      |  3 +++
+ gas/configure.tgt                             |  3 +++
+ include/bfdlink.h                             |  3 +++
+ ld/Makefile.am                                |  3 +++
+ ld/Makefile.in                                |  6 +++++
+ ld/NEWS                                       |  2 ++
+ ld/configure.tgt                              |  9 ++++++++
+ ld/emulparams/aarch64serenity.sh              |  6 +++++
+ ld/emulparams/elf64lriscvserenity.sh          |  2 ++
+ ld/emulparams/elf_serenity.sh                 |  1 +
+ ld/emulparams/elf_x86_64_serenity.sh          |  2 ++
+ ld/ld.texi                                    | 15 ++++++++++---
+ ld/ldlex.h                                    |  1 +
+ ld/lexsup.c                                   | 17 +++++++++++---
+ ld/testsuite/ld-elf/shared.exp                | 22 +++++++++++++++++++
+ .../ld-elf/symbolic-non-weak-func-a.rd        |  4 ++++
+ .../ld-elf/symbolic-non-weak-func-b.rd        |  4 ++++
+ ld/testsuite/ld-elf/symbolic-non-weak-func.s  | 18 +++++++++++++++
+ 21 files changed, 132 insertions(+), 14 deletions(-)
+ create mode 100644 gas/config/te-serenity.h
+ create mode 100644 ld/emulparams/aarch64serenity.sh
+ create mode 100644 ld/emulparams/elf64lriscvserenity.sh
+ create mode 100644 ld/emulparams/elf_serenity.sh
+ create mode 100644 ld/emulparams/elf_x86_64_serenity.sh
+ create mode 100644 ld/testsuite/ld-elf/symbolic-non-weak-func-a.rd
+ create mode 100644 ld/testsuite/ld-elf/symbolic-non-weak-func-b.rd
+ create mode 100644 ld/testsuite/ld-elf/symbolic-non-weak-func.s
+
+diff --git a/bfd/config.bfd b/bfd/config.bfd
+index 7343f7cb..76707676 100644
+--- a/bfd/config.bfd
++++ b/bfd/config.bfd
+@@ -285,6 +285,11 @@ case "${targ}" in
+     targ_selvecs="aarch64_elf64_be_vec aarch64_elf32_le_vec aarch64_elf32_be_vec arm_elf32_le_vec arm_elf32_be_vec"
+     want64=true
+     ;;
++  aarch64-*-serenity*)
++    targ_defvec=aarch64_elf64_le_vec
++    targ_selvecs=
++    want64=true
++    ;;
+   aarch64-*-linux* | aarch64-*-netbsd* | aarch64-*-nto* | aarch64-*-gnu*)
+     targ_defvec=aarch64_elf64_le_vec
+     targ_selvecs="aarch64_elf64_be_vec aarch64_elf32_le_vec aarch64_elf32_be_vec arm_elf32_le_vec arm_elf32_be_vec aarch64_pei_le_vec aarch64_pe_le_vec"
+@@ -734,6 +739,11 @@ case "${targ}" in
+     targ_selvecs="i386_elf32_vec iamcu_elf32_vec x86_64_elf32_vec"
+     want64=true
+     ;;
++  x86_64-*-serenity*)
++    targ_defvec=x86_64_elf64_vec
++    targ_selvecs=i386_elf32_vec
++    want64=true
++    ;;
+ #endif
+   i[3-7]86-*-lynxos*)
+     targ_defvec=i386_elf32_vec
+diff --git a/bfd/elflink.c b/bfd/elflink.c
+index 39fac063..b8b535e7 100644
+--- a/bfd/elflink.c
++++ b/bfd/elflink.c
+@@ -681,14 +681,12 @@ bfd_elf_link_mark_dynamic_symbol (struct bfd_link_info *info,
+   if(h->dynamic || bfd_link_relocatable (info))
+     return;
+ 
++  int type = sym != NULL ? ELF_ST_TYPE (sym->st_info) : STT_NOTYPE;
+   if ((info->dynamic_data
+-       && (h->type == STT_OBJECT
+-	   || h->type == STT_COMMON
+-	   || (sym != NULL
+-	       && (ELF_ST_TYPE (sym->st_info) == STT_OBJECT
+-		   || ELF_ST_TYPE (sym->st_info) == STT_COMMON))))
+-      || (d != NULL
+-	  && h->non_elf
++       && (type == STT_OBJECT || type == STT_COMMON))
++      || (info->dynamic_weak_functions && type == STT_FUNC
++	  && ELF_ST_BIND (sym->st_info) == STB_WEAK)
++      || (d != NULL && h->non_elf
+ 	  && (*d->match) (&d->head, NULL, h->root.root.string)))
+     {
+       h->dynamic = 1;
+diff --git a/gas/config/tc-i386.c b/gas/config/tc-i386.c
+index 54c66789..2a74e198 100644
+--- a/gas/config/tc-i386.c
++++ b/gas/config/tc-i386.c
+@@ -574,7 +574,8 @@ const char extra_symbol_chars[] = "*%-(["
+      && !defined (TE_Haiku)				\
+      && !defined (TE_FreeBSD)				\
+      && !defined (TE_DragonFly)				\
+-     && !defined (TE_NetBSD))
++     && !defined (TE_NetBSD)				\
++     && !defined (TE_SerenityOS))
+ /* This array holds the chars that always start a comment.  If the
+    pre-processor is disabled, these aren't very useful.  The option
+    --divide will remove '/' from this list.  */
+diff --git a/gas/config/te-serenity.h b/gas/config/te-serenity.h
+new file mode 100644
+index 00000000..f38faf59
+--- /dev/null
++++ b/gas/config/te-serenity.h
+@@ -0,0 +1,3 @@
++#include "te-generic.h"
++
++#define TE_SerenityOS 1
+diff --git a/gas/configure.tgt b/gas/configure.tgt
+index 03e43fd3..44cd3c7f 100644
+--- a/gas/configure.tgt
++++ b/gas/configure.tgt
+@@ -139,6 +139,7 @@ case ${generic_target} in
+   aarch64*-*-nto*)			fmt=elf;;
+   aarch64*-*-openbsd*)			fmt=elf;;
+   aarch64*-*-pe* | aarch64*-*-mingw*)	fmt=coff em=pepaarch64 ;;
++  aarch64*-*-serenity*)     fmt=elf em=serenity ;;
+   alpha-*-*vms*)			fmt=evax ;;
+   alpha-*-osf*)				fmt=ecoff ;;
+   alpha-*-linux*ecoff*)			fmt=ecoff ;;
+@@ -266,6 +267,7 @@ case ${generic_target} in
+   i386-*-*nt*)				fmt=coff em=pe ;;
+   i386-*-rdos*)				fmt=elf ;;
+   i386-*-darwin*)			fmt=macho ;;
++  i386-*-serenity)			fmt=elf em=serenity ;;
+ 
+   ia16-*-elf*)				fmt=elf ;;
+ 
+@@ -370,6 +372,7 @@ case ${generic_target} in
+ 
+   pru-*-*)				fmt=elf ;;
+ 
++  riscv64-*-serenity*)			fmt=elf endian=little em=serenity ;;
+   riscv*-*-haiku*)			fmt=elf endian=little em=haiku ;;
+   riscv*-*-*)				fmt=elf ;;
+ 
+diff --git a/include/bfdlink.h b/include/bfdlink.h
+index 00fe0f8c..dd81c6ef 100644
+--- a/include/bfdlink.h
++++ b/include/bfdlink.h
+@@ -375,6 +375,9 @@ struct bfd_link_info
+   /* TRUE if all data symbols should be dynamic.  */
+   unsigned int dynamic_data: 1;
+ 
++  /* TRUE if all weak function symbols should be dynamic.  */
++  unsigned int dynamic_weak_functions: 1;
++
+   /* TRUE if section groups should be resolved.  */
+   unsigned int resolve_section_groups: 1;
+ 
+diff --git a/ld/Makefile.am b/ld/Makefile.am
+index c006448b..8d358119 100644
+--- a/ld/Makefile.am
++++ b/ld/Makefile.am
+@@ -386,6 +386,7 @@ ALL_64_EMULATION_SOURCES = \
+ 	eaarch64linuxb.c \
+ 	eaarch64nto.c \
+ 	eaarch64pe.c \
++	eaarch64serenity.c \
+ 	earm64pe.c \
+ 	eelf32_x86_64.c \
+ 	eelf32b4300.c \
+@@ -443,6 +444,7 @@ ALL_64_EMULATION_SOURCES = \
+ 	eelf64lppc.c \
+ 	eelf64lppc_fbsd.c \
+ 	eelf64lriscv.c \
++	eelf64lriscvserenity.c \
+ 	eelf64lriscv_lp64.c \
+ 	eelf64lriscv_lp64f.c \
+ 	eelf64ltsmip.c \
+@@ -457,6 +459,7 @@ ALL_64_EMULATION_SOURCES = \
+ 	eelf_x86_64.c \
+ 	eelf_x86_64_fbsd.c \
+ 	eelf_x86_64_haiku.c \
++	eelf_x86_64_serenity.c \
+ 	eelf_x86_64_sol2.c \
+ 	ehppa64linux.c \
+ 	ei386pep.c \
+diff --git a/ld/Makefile.in b/ld/Makefile.in
+index 0acf5f47..9130c1eb 100644
+--- a/ld/Makefile.in
++++ b/ld/Makefile.in
+@@ -899,6 +899,7 @@ ALL_64_EMULATION_SOURCES = \
+ 	eaarch64linuxb.c \
+ 	eaarch64nto.c \
+ 	eaarch64pe.c \
++	eaarch64serenity.c \
+ 	earm64pe.c \
+ 	eelf32_x86_64.c \
+ 	eelf32b4300.c \
+@@ -956,6 +957,7 @@ ALL_64_EMULATION_SOURCES = \
+ 	eelf64lppc.c \
+ 	eelf64lppc_fbsd.c \
+ 	eelf64lriscv.c \
++	eelf64lriscvserenity.c \
+ 	eelf64lriscv_lp64.c \
+ 	eelf64lriscv_lp64f.c \
+ 	eelf64ltsmip.c \
+@@ -970,6 +972,7 @@ ALL_64_EMULATION_SOURCES = \
+ 	eelf_x86_64.c \
+ 	eelf_x86_64_fbsd.c \
+ 	eelf_x86_64_haiku.c \
++	eelf_x86_64_serenity.c \
+ 	eelf_x86_64_sol2.c \
+ 	ehppa64linux.c \
+ 	ei386pep.c \
+@@ -1280,6 +1283,7 @@ distclean-compile:
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64linuxb.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64nto.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64pe.Po@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64serenity.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaix5ppc.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaix5rs6.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaixppc.Po@am__quote@
+@@ -1459,6 +1463,7 @@ distclean-compile:
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lppc.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lppc_fbsd.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lriscv.Po@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lriscvserenity.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lriscv_lp64.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lriscv_lp64f.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64ltsmip.Po@am__quote@
+@@ -1482,6 +1487,7 @@ distclean-compile:
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_fbsd.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_haiku.Po@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_serenity.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_sol2.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eh8300elf.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eh8300elf_linux.Po@am__quote@
+diff --git a/ld/NEWS b/ld/NEWS
+index 8794e883..6409b244 100644
+--- a/ld/NEWS
++++ b/ld/NEWS
+@@ -243,6 +243,8 @@ Changes in 2.37:
+ 
+ * Add -Bno-symbolic to cancel -Bsymbolic and -Bsymbolic-functions.
+ 
++* Add -Bsymbolic-non-weak-functions as a safe subset of -Bsymbolic-functions.
++
+ Changes in 2.36:
+ 
+ * Add libdep plugin, for linking dependencies of static libraries that
+diff --git a/ld/configure.tgt b/ld/configure.tgt
+index df31897f..c97270cf 100644
+--- a/ld/configure.tgt
++++ b/ld/configure.tgt
+@@ -95,6 +95,9 @@ aarch64-*-freebsd*)	targ_emul=aarch64fbsd
+ aarch64-*-fuchsia*)	targ_emul=aarch64elf
+ 			targ_extra_emuls="aarch64elfb armelf armelfb"
+ 			;;
++aarch64-*-serenity*)	targ_emul=aarch64serenity
++			targ_extra_emuls=aarch64elf
++			;;
+ aarch64_be-*-linux-gnu_ilp32)
+ 			targ_emul=aarch64linux32b
+ 			targ_extra_libpath="aarch64linuxb aarch64linux aarch64linux32 armelfb_linux_eabi armelf_linux_eabi"
+@@ -822,6 +825,9 @@ riscv64*-*-linux*)	targ_emul=elf64lriscv
+ 			targ_extra_emuls="elf64lriscv_lp64f elf64lriscv_lp64 elf32lriscv elf32lriscv_ilp32f elf32lriscv_ilp32 elf64briscv elf64briscv_lp64f elf64briscv_lp64 elf32briscv elf32briscv_ilp32f elf32briscv_ilp32"
+ 			targ_extra_libpath=$targ_extra_emuls
+ 			;;
++riscv64-*-serenity*)	targ_emul=elf64lriscvserenity
++			targ_extra_emuls=elf64lriscv
++			;;
+ riscv64be*-*-*)		targ_emul=elf64briscv
+ 			targ_extra_emuls="elf32briscv elf64lriscv elf32lriscv"
+ 			targ_extra_libpath=$targ_extra_emuls
+@@ -1006,6 +1012,9 @@ x86_64-*-linux-*)	targ_emul=elf_x86_64
+ x86_64-*-redox*)	targ_emul=elf_x86_64
+ 			targ_extra_emuls=elf_i386
+ 			;;
++x86_64-*-serenity*)	targ_emul=elf_x86_64_serenity
++			targ_extra_emuls="elf_x86_64 elf_i386"
++			;;
+ x86_64-*-solaris2*)	targ_emul=elf_x86_64_sol2
+ 			targ_extra_emuls="elf_x86_64 elf_i386_sol2 elf_i386_ldso elf_i386 elf_iamcu"
+ 			targ_extra_libpath=$targ_extra_emuls
+diff --git a/ld/emulparams/aarch64serenity.sh b/ld/emulparams/aarch64serenity.sh
+new file mode 100644
+index 00000000..8c037db1
+--- /dev/null
++++ b/ld/emulparams/aarch64serenity.sh
+@@ -0,0 +1,6 @@
++source_sh ${srcdir}/emulparams/aarch64elf.sh
++source_sh ${srcdir}/emulparams/elf_serenity.sh
++
++COMMONPAGESIZE="CONSTANT (COMMONPAGESIZE)"
++unset EMBEDDED
++unset STACK_ADDR
+diff --git a/ld/emulparams/elf64lriscvserenity.sh b/ld/emulparams/elf64lriscvserenity.sh
+new file mode 100644
+index 00000000..8bcbea81
+--- /dev/null
++++ b/ld/emulparams/elf64lriscvserenity.sh
+@@ -0,0 +1,2 @@
++source_sh ${srcdir}/emulparams/elf64lriscv.sh
++source_sh ${srcdir}/emulparams/elf_serenity.sh
+diff --git a/ld/emulparams/elf_serenity.sh b/ld/emulparams/elf_serenity.sh
+new file mode 100644
+index 00000000..c434baca
+--- /dev/null
++++ b/ld/emulparams/elf_serenity.sh
+@@ -0,0 +1 @@
++ELF_INTERPRETER_NAME=\"/usr/lib/Loader.so\"
+diff --git a/ld/emulparams/elf_x86_64_serenity.sh b/ld/emulparams/elf_x86_64_serenity.sh
+new file mode 100644
+index 00000000..536af1e3
+--- /dev/null
++++ b/ld/emulparams/elf_x86_64_serenity.sh
+@@ -0,0 +1,2 @@
++source_sh ${srcdir}/emulparams/elf_x86_64.sh
++source_sh ${srcdir}/emulparams/elf_serenity.sh
+diff --git a/ld/ld.texi b/ld/ld.texi
+index 8ff65ec6..9b1870e0 100644
+--- a/ld/ld.texi
++++ b/ld/ld.texi
+@@ -1883,7 +1883,7 @@ libraries.
+ 
+ @kindex -Bsymbolic
+ @item -Bsymbolic
+-When creating a shared library, bind references to global symbols to the
++When creating a shared library, bind references to non-local symbols to the
+ definition within the shared library, if any.  Normally, it is possible
+ for a program linked against a shared library to override the definition
+ within the shared library.  This option is only meaningful on ELF
+@@ -1891,11 +1891,20 @@ platforms which support shared libraries.
+ 
+ @kindex -Bsymbolic-functions
+ @item -Bsymbolic-functions
+-When creating a shared library, bind references to global function
+-symbols to the definition within the shared library, if any.
++When creating a shared library, bind references to non-local function
++symbols to the definition within the shared library, if any.  A vague linkage
++function definition is weak. It may have different addresses in the linked
++shared library and outside the shared library.
+ This option is only meaningful on ELF platforms which support shared
+ libraries.
+ 
++@kindex -Bsymbolic-non-weak-functions
++@item -Bsymbolic-non-weak-functions
++When creating a shared library, bind references to @code{STB_GLOBAL} function
++symbols to the definition within the shared library, if any.  Noticeably this
++option skips C++ vague linkage functions and is thus safe.
++This option is only meaningful on ELF platforms which support shared libraries.
++
+ @kindex -Bno-symbolic
+ @item -Bno-symbolic
+ This option can cancel previously specified @samp{-Bsymbolic} and
+diff --git a/ld/ldlex.h b/ld/ldlex.h
+index 24cac1cd..c4047edb 100644
+--- a/ld/ldlex.h
++++ b/ld/ldlex.h
+@@ -66,6 +66,7 @@ enum option_values
+   OPTION_SECTION_ORDERING_FILE,
+   OPTION_STATS,
+   OPTION_SYMBOLIC,
++  OPTION_SYMBOLIC_NON_WEAK_FUNCTIONS,
+   OPTION_SYMBOLIC_FUNCTIONS,
+   OPTION_TASK_LINK,
+   OPTION_IMAGE_BASE,
+diff --git a/ld/lexsup.c b/ld/lexsup.c
+index 5cb77992..273e42fd 100644
+--- a/ld/lexsup.c
++++ b/ld/lexsup.c
+@@ -309,9 +309,11 @@ static const struct ld_option ld_options[] =
+   { {"Bno-symbolic", no_argument, NULL, OPTION_NO_SYMBOLIC},
+     '\0', NULL, N_("Don't bind global references locally"), ONE_DASH },
+   { {"Bsymbolic", no_argument, NULL, OPTION_SYMBOLIC},
+-    '\0', NULL, N_("Bind global references locally"), ONE_DASH },
++    '\0', NULL, N_("Bind default visibility defined symbols locally for -shared"), ONE_DASH },
++  { {"Bsymbolic-non-weak-functions", no_argument, NULL, OPTION_SYMBOLIC_NON_WEAK_FUNCTIONS},
++    '\0', NULL, N_("Bind default visibility defined STB_GLOBAL function symbols locally for -shared"), ONE_DASH },
+   { {"Bsymbolic-functions", no_argument, NULL, OPTION_SYMBOLIC_FUNCTIONS},
+-    '\0', NULL, N_("Bind global function references locally"), ONE_DASH },
++    '\0', NULL, N_("Bind default visibility defined function symbols locally for -shared"), ONE_DASH },
+   { {"check-sections", no_argument, NULL, OPTION_CHECK_SECTIONS},
+     '\0', NULL, N_("Check section addresses for overlaps (default)"),
+     TWO_DASHES },
+@@ -661,8 +663,9 @@ parse_args (unsigned argc, char **argv)
+   enum symbolic_enum
+   {
+     symbolic_unset = 0,
+-    symbolic,
++    symbolic_non_weak_functions,
+     symbolic_functions,
++    symbolic,
+   } opt_symbolic = symbolic_unset;
+   enum dynamic_list_enum
+   {
+@@ -1423,6 +1426,9 @@ parse_args (unsigned argc, char **argv)
+ 	case OPTION_SYMBOLIC:
+ 	  opt_symbolic = symbolic;
+ 	  break;
++	case OPTION_SYMBOLIC_NON_WEAK_FUNCTIONS:
++	  opt_symbolic = symbolic_non_weak_functions;
++	  break;
+ 	case OPTION_SYMBOLIC_FUNCTIONS:
+ 	  opt_symbolic = symbolic_functions;
+ 	  break;
+@@ -2018,6 +2024,11 @@ parse_args (unsigned argc, char **argv)
+ 	link_info.dynamic = true;
+ 	link_info.dynamic_data = true;
+ 	break;
++      case symbolic_non_weak_functions:
++	link_info.dynamic = true;
++	link_info.dynamic_data = true;
++	link_info.dynamic_weak_functions = true;
++	break;
+       }
+ 
+   /* -z nosectionheader implies --strip-all.  */
+diff --git a/ld/testsuite/ld-elf/shared.exp b/ld/testsuite/ld-elf/shared.exp
+index 2888ca0b..85fb2fb5 100644
+--- a/ld/testsuite/ld-elf/shared.exp
++++ b/ld/testsuite/ld-elf/shared.exp
+@@ -459,6 +459,28 @@ run_ld_link_tests [list \
+ 	"symbolic-func.so"] \
+ ]
+ 
++if {[istarget "aarch64*-*-*"] || [istarget "powerpc*-*-*"] ||
++    [istarget "i?86-*-*"] || [istarget "x86_64-*-*"]} {
++    run_ld_link_tests [list \
++        [list "-Bsymbolic-non-weak-functions -Bsymbolic" \
++        "-shared -Bsymbolic-non-weak-functions -Bsymbolic" "" "$AFLAGS_PIC" \
++        {symbolic-non-weak-func.s} {{readelf {-r --wide} symbolic-non-weak-func-a.rd}} \
++        "symbolic-non-weak-func-a.so"] \
++    ]
++    run_ld_link_tests [list \
++        [list "-Bsymbolic-non-weak-functions" \
++        "-shared -Bsymbolic-non-weak-functions" "" "$AFLAGS_PIC" \
++        {symbolic-non-weak-func.s} {{readelf {-r --wide} symbolic-non-weak-func-b.rd}} \
++        "symbolic-non-weak-func-b.so"] \
++    ]
++    run_ld_link_tests [list \
++        [list "-Bsymbolic-functions -Bsymbolic-non-weak-functions" \
++        "-shared -Bsymbolic-functions -Bsymbolic-non-weak-functions" "" "$AFLAGS_PIC" \
++        {symbolic-non-weak-func.s} {{readelf {-r --wide} symbolic-non-weak-func-b.rd}} \
++        "symbolic-non-weak-func-b.so"] \
++    ]
++}
++
+ run_ld_link_tests [list \
+     [list "Build pr20995.so" \
+ 	"-shared" "" "$AFLAGS_PIC" \
+diff --git a/ld/testsuite/ld-elf/symbolic-non-weak-func-a.rd b/ld/testsuite/ld-elf/symbolic-non-weak-func-a.rd
+new file mode 100644
+index 00000000..ef591840
+--- /dev/null
++++ b/ld/testsuite/ld-elf/symbolic-non-weak-func-a.rd
+@@ -0,0 +1,4 @@
++#...
++[0-9a-f]+ +[0-9a-f]+ +R_.*_RELATIVE .*
++[0-9a-f]+ +[0-9a-f]+ +R_.*_RELATIVE .*
++[0-9a-f]+ +[0-9a-f]+ +R_.*_RELATIVE .*
+diff --git a/ld/testsuite/ld-elf/symbolic-non-weak-func-b.rd b/ld/testsuite/ld-elf/symbolic-non-weak-func-b.rd
+new file mode 100644
+index 00000000..34228b06
+--- /dev/null
++++ b/ld/testsuite/ld-elf/symbolic-non-weak-func-b.rd
+@@ -0,0 +1,4 @@
++#...
++[0-9a-f]+ +[0-9a-f]+ +R_.*_RELATIVE .*
++[0-9a-f]+ +[0-9a-f]+ +R_.*_RELATIVE .*
++[0-9a-f]+ +[0-9a-f]+ +R_.* weak_fun.*
+diff --git a/ld/testsuite/ld-elf/symbolic-non-weak-func.s b/ld/testsuite/ld-elf/symbolic-non-weak-func.s
+new file mode 100644
+index 00000000..e259f12b
+--- /dev/null
++++ b/ld/testsuite/ld-elf/symbolic-non-weak-func.s
+@@ -0,0 +1,18 @@
++	.text
++	.global global_fun
++	.type	global_fun, %function
++global_fun:
++	.space	4
++	.weak	weak_fun
++	.type	weak_fun, %function
++weak_fun:
++	.space	4
++
++	.section .data,"aw",%progbits
++	.p2align 3
++	.dc.a	global_data
++	.dc.a	global_fun
++	.dc.a	weak_fun
++
++	.global global_data
++global_data:
+-- 
+2.51.2
+

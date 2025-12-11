@@ -1,0 +1,466 @@
+From f069b2d2acc56647b6177aeeca75ef4a424493a3 Mon Sep 17 00:00:00 2001
+From: Kartatz <105828205+Kartatz@users.noreply.github.com>
+Date: Thu, 11 Dec 2025 02:10:50 -0300
+Subject: [PATCH] GCC 15
+
+https://github.com/SerenityOS/serenity/tree/master/Toolchain/Patches/gcc
+---
+ fixincludes/mkfixinc.sh               |  1 +
+ gcc/common/config/i386/i386-common.cc |  4 +++
+ gcc/config.gcc                        | 23 ++++++++++++
+ gcc/config.host                       |  2 +-
+ gcc/config/i386/serenity.h            |  7 ++++
+ gcc/config/serenity.h                 | 50 +++++++++++++++++++++++++++
+ gcc/config/serenity.opt               | 35 +++++++++++++++++++
+ gcc/config/serenity.opt.urls          |  1 +
+ gcc/configure                         |  3 ++
+ libgcc/config.host                    | 18 ++++++++++
+ libgcc/config/riscv/feature_bits.c    | 27 +++++++++++++--
+ libgcc/config/t-slibgcc               |  1 -
+ libgcc/unwind-dw2-fde-dip.c           |  6 ++++
+ libstdc++-v3/acinclude.m4             |  4 +--
+ libstdc++-v3/configure                | 15 +++++---
+ libstdc++-v3/configure.host           |  3 ++
+ libstdc++-v3/crossconfig.m4           |  2 +-
+ 17 files changed, 190 insertions(+), 12 deletions(-)
+ create mode 100644 gcc/config/i386/serenity.h
+ create mode 100644 gcc/config/serenity.h
+ create mode 100644 gcc/config/serenity.opt
+ create mode 100644 gcc/config/serenity.opt.urls
+
+diff --git a/fixincludes/mkfixinc.sh b/fixincludes/mkfixinc.sh
+index 7112f4dcd..9dcd2318a 100755
+--- a/fixincludes/mkfixinc.sh
++++ b/fixincludes/mkfixinc.sh
+@@ -11,6 +11,7 @@ target=fixinc.sh
+ 
+ # Check for special fix rules for particular targets
+ case $machine in
++    *-serenity* | \
+     i?86-*-cygwin* | \
+     *-mingw32* | \
+     powerpc-*-eabisim* | \
+diff --git a/gcc/common/config/i386/i386-common.cc b/gcc/common/config/i386/i386-common.cc
+index a87147c09..60489e893 100644
+--- a/gcc/common/config/i386/i386-common.cc
++++ b/gcc/common/config/i386/i386-common.cc
+@@ -2071,6 +2071,10 @@ ix86_option_init_struct (struct gcc_options *opts)
+        avoid calling them when that's the only reason we would.  */
+     opts->x_flag_errno_math = 0;
+ 
++#ifdef TARGET_SERENITY
++  opts->x_flag_errno_math = 0;
++#endif
++
+   opts->x_flag_pcc_struct_return = 2;
+   opts->x_flag_asynchronous_unwind_tables = 2;
+ }
+diff --git a/gcc/config.gcc b/gcc/config.gcc
+index 087aaa7be..97fbb5921 100644
+--- a/gcc/config.gcc
++++ b/gcc/config.gcc
+@@ -723,6 +723,18 @@ x86_cpus="generic intel"
+ 
+ # Common parts for widely ported systems.
+ case ${target} in
++*-*-serenity*)
++  gas=yes
++  gnu_ld=yes
++  default_use_cxa_atexit=yes
++  extra_options="${extra_options} serenity.opt"
++  tmake_file="t-slibgcc"
++  case ${target} in
++    aarch64*-* | riscv64-* | x86_64-*)
++      default_gnu_indirect_function=yes
++      ;;
++  esac
++  ;;
+ *-*-darwin*)
+   tmake_file="t-darwin "
+   tm_file="${tm_file} darwin.h"
+@@ -1186,6 +1198,17 @@ case ${target} in
+ esac
+ 
+ case ${target} in
++x86_64-*-serenity*)
++	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h glibc-stdint.h i386/i386elf.h i386/x86-64.h serenity.h i386/serenity.h"
++	;;
++aarch64*-*-serenity*)
++	tm_file="${tm_file} elfos.h glibc-stdint.h aarch64/aarch64-elf.h serenity.h"
++	tmake_file="${tmake_file} aarch64/t-aarch64"
++	;;
++riscv64-*-serenity*)
++	tm_file="${tm_file} elfos.h glibc-stdint.h riscv/elf.h serenity.h"
++	tmake_file="${tmake_file} riscv/t-riscv"
++	;;
+ aarch64*-*-elf | aarch64*-*-fuchsia* | aarch64*-*-rtems*)
+ 	tm_file="${tm_file} elfos.h newlib-stdint.h"
+ 	tm_file="${tm_file} aarch64/aarch64-elf.h aarch64/aarch64-errata.h aarch64/aarch64-elf-raw.h"
+diff --git a/gcc/config.host b/gcc/config.host
+index 4c1a5e991..49128b1e2 100644
+--- a/gcc/config.host
++++ b/gcc/config.host
+@@ -100,7 +100,7 @@ esac
+ 
+ case ${host} in
+   aarch64*-*-freebsd* | aarch64*-*-linux* | aarch64*-*-fuchsia* |\
+-  aarch64*-*-darwin*)
++  aarch64*-*-darwin* | aarch64-*-serenity*)
+     case ${target} in
+       aarch64*-*-*)
+ 	host_extra_gcc_objs="driver-aarch64.o"
+diff --git a/gcc/config/i386/serenity.h b/gcc/config/i386/serenity.h
+new file mode 100644
+index 000000000..53a4b8e93
+--- /dev/null
++++ b/gcc/config/i386/serenity.h
+@@ -0,0 +1,7 @@
++/* Ensure that we are using the SIZE_TYPE indicated by SysV */
++#undef SIZE_TYPE
++#define SIZE_TYPE    (TARGET_64BIT ? "long unsigned int" : "unsigned int")
++
++/* Ensure that ptrdiff_t matches the actual pointer size */
++#undef PTRDIFF_TYPE
++#define PTRDIFF_TYPE    (TARGET_64BIT ? "long int" : "int")
+diff --git a/gcc/config/serenity.h b/gcc/config/serenity.h
+new file mode 100644
+index 000000000..5b6c764c9
+--- /dev/null
++++ b/gcc/config/serenity.h
+@@ -0,0 +1,50 @@
++/* Useful if you wish to make target-specific GCC changes. */
++#undef TARGET_SERENITY
++#define TARGET_SERENITY 1
++
++#if defined(HAVE_LD_EH_FRAME_HDR)
++#define LINK_EH_SPEC "%{!static|static-pie:--eh-frame-hdr} "
++#endif
++
++/* Default arguments you want when running your
++   x86_64-serenity-gcc toolchain */
++#undef LIB_SPEC
++#define LIB_SPEC "-lc" /* link against C standard library */
++
++/* Files that are linked before user code.
++   The %s tells GCC to look for these files in the library directory. */
++#undef STARTFILE_SPEC
++#define STARTFILE_SPEC "%{!shared:crt0.o%s} %{shared|static-pie|!no-pie:crtbeginS.o%s; :crtbegin.o%s}"
++
++/* Files that are linked after user code. */
++#undef ENDFILE_SPEC
++#define ENDFILE_SPEC "%{shared|static-pie|!no-pie:crtendS.o%s; :crtend.o%s}"
++
++#define TARGET_LIBC_PROVIDES_SSP
++
++#undef LINK_SPEC
++#define LINK_SPEC "%{shared:-shared} %{static:-static} %{!static: %{rdynamic:-export-dynamic} -dynamic-linker /usr/lib/Loader.so}"
++
++#undef CC1_SPEC
++#define CC1_SPEC "-fno-semantic-interposition"
++
++#undef CPP_SPEC
++#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
++
++/* Use --as-needed -lgcc_s for eh support. */
++#define USE_LD_AS_NEEDED 1
++
++/* We don't have a separate math library, it's included within libc. While we do have compatibility
++   linker scripts in place, just don't add it to the linker invocation to begin with. */
++#define MATH_LIBRARY ""
++
++/* Additional predefined macros. */
++#undef TARGET_OS_CPP_BUILTINS
++#define TARGET_OS_CPP_BUILTINS()      \
++  do {                                \
++    builtin_define ("__serenity__");      \
++    builtin_define ("__unix__");      \
++    builtin_assert ("system=serenity");   \
++    builtin_assert ("system=unix");   \
++    builtin_assert ("system=posix");   \
++  } while(0);
+diff --git a/gcc/config/serenity.opt b/gcc/config/serenity.opt
+new file mode 100644
+index 000000000..2756a5575
+--- /dev/null
++++ b/gcc/config/serenity.opt
+@@ -0,0 +1,35 @@
++; SerenityOS options.
++
++; Copyright (C) 2021 Gunnar Beutner <gunnar@beutner.name>
++;
++; This file is part of GCC.
++;
++; GCC is free software; you can redistribute it and/or modify it under
++; the terms of the GNU General Public License as published by the Free
++; Software Foundation; either version 3, or (at your option) any later
++; version.
++;
++; GCC is distributed in the hope that it will be useful, but WITHOUT ANY
++; WARRANTY; without even the implied warranty of MERCHANTABILITY or
++; FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
++; for more details.
++;
++; You should have received a copy of the GNU General Public License
++; along with GCC; see the file COPYING3.  If not see
++; <http://www.gnu.org/licenses/>.
++
++; See the GCC internals manual (options.texi) for a description of
++; this file's format.
++
++; Please try to keep this file in ASCII collating order.
++
++posix
++Driver
++
++pthread
++Driver
++
++rdynamic
++Driver
++
++; This comment is to ensure we retain the blank line above.
+diff --git a/gcc/config/serenity.opt.urls b/gcc/config/serenity.opt.urls
+new file mode 100644
+index 000000000..3166f813b
+--- /dev/null
++++ b/gcc/config/serenity.opt.urls
+@@ -0,0 +1 @@
++; Not sure what to put here but this works
+diff --git a/gcc/configure b/gcc/configure
+index 16965953f..63fbeab1b 100755
+--- a/gcc/configure
++++ b/gcc/configure
+@@ -33648,6 +33648,9 @@ case "$target" in
+   *-linux-musl*)
+     gcc_cv_target_dl_iterate_phdr=yes
+     ;;
++  *-serenity*)
++    gcc_cv_target_dl_iterate_phdr=yes
++    ;;
+ esac
+ 
+ if test x$gcc_cv_target_dl_iterate_phdr = xyes; then
+diff --git a/libgcc/config.host b/libgcc/config.host
+index 6a88ee5a2..5fc80843a 100644
+--- a/libgcc/config.host
++++ b/libgcc/config.host
+@@ -1358,6 +1358,11 @@ riscv*-*-freebsd*)
+ 	tmake_file="${tmake_file} riscv/t-crtstuff riscv/t-softfp${host_address} t-softfp riscv/t-elf riscv/t-elf${host_address} t-slibgcc-libgcc"
+ 	extra_parts="$extra_parts crtbegin.o crtend.o crti.o crtn.o crtendS.o crtbeginT.o"
+ 	;;
++riscv64-*-serenity*)
++	extra_parts="$extra_parts crti.o crtbegin.o crtbeginS.o crtend.o crtendS.o crtn.o"
++	tmake_file="$tmake_file riscv/t-softfp64 t-softfp riscv/t-elf riscv/t-elf64 t-slibgcc-libgcc t-eh-dw2-dip"
++	tmake_file="$tmake_file riscv/t-crtstuff t-crtstuff-pic t-libgcc-pic t-slibgcc t-slibgcc-gld-nover"
++	;;
+ riscv*-*-*)
+ 	tmake_file="${tmake_file} riscv/t-softfp${host_address} t-softfp riscv/t-elf riscv/t-elf${host_address}"
+ 	extra_parts="$extra_parts crtbegin.o crtend.o crti.o crtn.o"
+@@ -1571,6 +1576,19 @@ nvptx-*)
+ 	tmake_file="$tmake_file nvptx/t-nvptx"
+ 	extra_parts="crt0.o"
+ 	;;
++x86_64-*-serenity*)
++	extra_parts="$extra_parts crti.o crtbegin.o crtbeginS.o crtend.o crtendS.o crtn.o"
++	tmake_file="$tmake_file i386/t-crtstuff t-crtstuff-pic t-libgcc-pic t-slibgcc t-eh-dw2-dip"
++	;;
++aarch64-*-serenity*)
++	extra_parts="$extra_parts crti.o crtbegin.o crtbeginS.o crtend.o crtendS.o crtn.o"
++	extra_parts="$extra_parts crtfastmath.o"
++	tmake_file="$tmake_file ${cpu_type}/t-aarch64"
++	tmake_file="$tmake_file ${cpu_type}/t-lse t-slibgcc t-slibgcc-libgcc t-slibgcc-gld-nover"
++	tmake_file="$tmake_file ${cpu_type}/t-softfp t-softfp t-crtfm"
++	md_unwind_def_header=aarch64/aarch64-unwind-def.h
++	md_unwind_header=aarch64/aarch64-unwind.h
++	;;
+ *)
+ 	echo "*** Configuration ${host} not supported" 1>&2
+ 	exit 1
+diff --git a/libgcc/config/riscv/feature_bits.c b/libgcc/config/riscv/feature_bits.c
+index 157bcdcad..8b3f45ffd 100644
+--- a/libgcc/config/riscv/feature_bits.c
++++ b/libgcc/config/riscv/feature_bits.c
+@@ -145,7 +145,7 @@ struct {
+ 
+ #define SET_EXT(EXT) features[EXT##_GROUPID] |= EXT##_BITMASK
+ 
+-#ifdef __linux
++#if defined(__linux)
+ 
+ #define __NR_riscv_hwprobe 258
+ #define RISCV_HWPROBE_KEY_MVENDORID 0
+@@ -376,6 +376,27 @@ static void __init_riscv_features_bits_linux ()
+ 
+   __riscv_feature_bits.length = RISCV_FEATURE_BITS_LENGTH;
+ }
++
++#elif defined(__serenity__)
++
++extern void __get_riscv_feature_bits(void*, void*) __attribute__((weak));
++
++static void __init_riscv_features_bits_serenity ()
++{
++  if (__get_riscv_feature_bits)
++    {
++      __riscv_feature_bits.length = RISCV_FEATURE_BITS_LENGTH;
++      __get_riscv_feature_bits (&__riscv_feature_bits, &__riscv_cpu_model);
++    }
++  else
++    {
++      __riscv_feature_bits.length = 0;
++      __riscv_cpu_model.mvendorid = 0;
++      __riscv_cpu_model.marchid = 0;
++      __riscv_cpu_model.mimpid = 0;
++    }
++}
++
+ #endif
+ 
+ 
+@@ -388,8 +409,10 @@ __init_riscv_feature_bits ()
+   if (__init)
+     return;
+ 
+-#ifdef __linux
++#if defined(__linux)
+   __init_riscv_features_bits_linux ();
++#elif defined(__serenity__)
++  __init_riscv_features_bits_serenity ();
+ #else
+   /* Unsupported, just initialize that into all zeros.  */
+   __riscv_feature_bits.length = 0;
+diff --git a/libgcc/config/t-slibgcc b/libgcc/config/t-slibgcc
+index 68cb3b31e..9fd05974f 100644
+--- a/libgcc/config/t-slibgcc
++++ b/libgcc/config/t-slibgcc
+@@ -26,7 +26,6 @@ SHLIB_MAP = @shlib_map_file@
+ SHLIB_OBJS = @shlib_objs@
+ SHLIB_DIR = @multilib_dir@
+ SHLIB_SLIBDIR_QUAL = @shlib_slibdir_qual@
+-SHLIB_LC = -lc
+ SHLIB_MAKE_SOLINK = $(LN_S) $(SHLIB_SONAME) $(SHLIB_DIR)/$(SHLIB_SOLINK)
+ SHLIB_INSTALL_SOLINK = $(LN_S) $(SHLIB_SONAME) \
+ 	$(DESTDIR)$(slibdir)$(SHLIB_SLIBDIR_QUAL)/$(SHLIB_SOLINK)
+diff --git a/libgcc/unwind-dw2-fde-dip.c b/libgcc/unwind-dw2-fde-dip.c
+index 5c19838e0..01138feee 100644
+--- a/libgcc/unwind-dw2-fde-dip.c
++++ b/libgcc/unwind-dw2-fde-dip.c
+@@ -57,6 +57,12 @@
+ # define USE_PT_GNU_EH_FRAME
+ #endif
+ 
++#if !defined(inhibit_libc) && defined(HAVE_LD_EH_FRAME_HDR) \
++    && defined(TARGET_DL_ITERATE_PHDR) \
++    && defined(__serenity__)
++# define USE_PT_GNU_EH_FRAME
++#endif
++
+ #if !defined(inhibit_libc) && defined(HAVE_LD_EH_FRAME_HDR) \
+     && defined(TARGET_DL_ITERATE_PHDR) \
+     && defined(__linux__)
+diff --git a/libstdc++-v3/acinclude.m4 b/libstdc++-v3/acinclude.m4
+index a0094c2dd..d69a9eac1 100644
+--- a/libstdc++-v3/acinclude.m4
++++ b/libstdc++-v3/acinclude.m4
+@@ -1792,7 +1792,7 @@ AC_DEFUN([GLIBCXX_ENABLE_LIBSTDCXX_TIME], [
+         ac_has_nanosleep=yes
+         ac_has_sched_yield=yes
+         ;;
+-      freebsd*|netbsd*|dragonfly*|rtems*)
++      freebsd*|netbsd*|dragonfly*|rtems*|serenity*)
+         ac_has_clock_monotonic=yes
+         ac_has_clock_realtime=yes
+         ac_has_nanosleep=yes
+@@ -2807,7 +2807,7 @@ AC_DEFUN([GLIBCXX_ENABLE_CLOCALE], [
+       dragonfly* | freebsd*)
+ 	enable_clocale_flag=dragonfly
+ 	;;
+-      openbsd*)
++      openbsd* | serenity*)
+ 	enable_clocale_flag=newlib
+ 	;;
+       *)
+diff --git a/libstdc++-v3/configure b/libstdc++-v3/configure
+index 527548051..071a0e546 100755
+--- a/libstdc++-v3/configure
++++ b/libstdc++-v3/configure
+@@ -12003,6 +12003,11 @@ else
+     lt_cv_dlopen_libs=
+     ;;
+ 
++  serenity*)
++    lt_cv_dlopen="dlopen"
++    lt_cv_dlopen_libs=""
++    ;;
++
+   darwin*)
+   # if libdl is installed we need to link against it
+     { $as_echo "$as_me:${as_lineno-$LINENO}: checking for dlopen in -ldl" >&5
+@@ -15784,8 +15789,8 @@ if test "$enable_shared" = yes; then
+   glibcxx_compiler_shared_flag="-D_GLIBCXX_SHARED"
+ 
+ else
+-  glibcxx_lt_pic_flag=
+-  glibcxx_compiler_pic_flag=
++  glibcxx_lt_pic_flag="-prefer-pic"
++  glibcxx_compiler_pic_flag="$lt_prog_compiler_pic_CXX"
+   glibcxx_compiler_shared_flag=
+ fi
+ 
+@@ -16680,7 +16685,7 @@ fi
+       dragonfly* | freebsd*)
+ 	enable_clocale_flag=dragonfly
+ 	;;
+-      openbsd*)
++      openbsd* | serenity*)
+ 	enable_clocale_flag=newlib
+ 	;;
+       *)
+@@ -21377,7 +21382,7 @@ fi
+         ac_has_nanosleep=yes
+         ac_has_sched_yield=yes
+         ;;
+-      freebsd*|netbsd*|dragonfly*|rtems*)
++      freebsd*|netbsd*|dragonfly*|rtems*|serenity*)
+         ac_has_clock_monotonic=yes
+         ac_has_clock_realtime=yes
+         ac_has_nanosleep=yes
+@@ -28676,7 +28681,7 @@ case "${host}" in
+     # This is a freestanding configuration; there is nothing to do here.
+     ;;
+ 
+-  avr*-*-*)
++  avr*-*-* | *serenity*)
+     $as_echo "#define HAVE_ACOSF 1" >>confdefs.h
+ 
+     $as_echo "#define HAVE_ASINF 1" >>confdefs.h
+diff --git a/libstdc++-v3/configure.host b/libstdc++-v3/configure.host
+index 253e5a9ad..45a222826 100644
+--- a/libstdc++-v3/configure.host
++++ b/libstdc++-v3/configure.host
+@@ -307,6 +307,9 @@ case "${host_os}" in
+     # Use libatomic if necessary and avoid libstdc++ specific atomicity support
+     atomicity_dir="cpu/generic/atomicity_builtins"
+     ;;
++  serenity*)
++    os_include_dir="os/newlib"
++    ;;
+   solaris2*)
+     os_include_dir="os/solaris"
+     ;;
+diff --git a/libstdc++-v3/crossconfig.m4 b/libstdc++-v3/crossconfig.m4
+index b3269cb88..3bba96536 100644
+--- a/libstdc++-v3/crossconfig.m4
++++ b/libstdc++-v3/crossconfig.m4
+@@ -9,7 +9,7 @@ case "${host}" in
+     # This is a freestanding configuration; there is nothing to do here.
+     ;;
+ 
+-  avr*-*-*)
++  avr*-*-* | *serenity*)
+     AC_DEFINE(HAVE_ACOSF)
+     AC_DEFINE(HAVE_ASINF)
+     AC_DEFINE(HAVE_ATAN2F)
+-- 
+2.51.2
+
