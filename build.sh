@@ -607,7 +607,7 @@ for triplet in "${targets[@]}"; do
 	env ${args} make \
 		CFLAGS_FOR_TARGET="${ccflags} ${linkflags}" \
 		CXXFLAGS_FOR_TARGET="${ccflags} ${linkflags}" \
-		LDFLAGS_FOR_TARGET="${linkflags}" \
+		LDFLAGS_FOR_TARGET="${linkflags}  -Xlinker -rpath-link -Xlinker ${toolchain_directory}/${triplet}/lib" \
 		gcc_cv_objdump="${CROSS_COMPILE_TRIPLET}-objdump" \
 		gcc_cv_ld_as_needed='yes' \
 		all --jobs="${max_jobs}"
