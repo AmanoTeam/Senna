@@ -42,8 +42,8 @@ declare -r linkflags='-Xlinker -s'
 
 declare -ra targets=(
 	'riscv64-unknown-serenity'
-	'x86_64-unknown-serenity'
-	'aarch64-unknown-serenity'
+	# 'x86_64-unknown-serenity'
+	# 'aarch64-unknown-serenity'
 )
 
 declare -r PKG_CONFIG_PATH="${toolchain_directory}/lib/pkgconfig"
@@ -200,6 +200,7 @@ if ! [ -f "${binutils_tarball}" ]; then
 	
 	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/patches/0001-Binutils.patch"
 	
+	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-binutils-host-tools.patch"
 	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Don-t-warn-about-local-symbols-within-the-globals.patch"
 fi
 
