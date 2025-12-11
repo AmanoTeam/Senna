@@ -2,8 +2,8 @@
 
 set -eu
 
-declare -r toolchain_directory='/tmp/venti'
-declare -r share_directory="${toolchain_directory}/usr/local/share/venti"
+declare -r toolchain_directory='/tmp/senna'
+declare -r share_directory="${toolchain_directory}/usr/local/share/senna"
 
 declare -r environment="LD_LIBRARY_PATH=${toolchain_directory}/lib PATH=${PATH}:${toolchain_directory}/bin"
 
