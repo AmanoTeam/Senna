@@ -608,6 +608,7 @@ for triplet in "${targets[@]}"; do
 		CXXFLAGS_FOR_TARGET="${ccflags} ${linkflags}" \
 		LDFLAGS_FOR_TARGET="${linkflags}" \
 		gcc_cv_objdump="${CROSS_COMPILE_TRIPLET}-objdump" \
+		gcc_cv_ld_as_needed='yes' \
 		all --jobs="${max_jobs}"
 	make install
 	
