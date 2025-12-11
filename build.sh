@@ -2,14 +2,14 @@
 
 set -eu
 
-declare -r revision="$(git rev-parse --short HEAD)"
+declare -r toolchain_directory='/tmp/venti'
+declare -r share_directory="${toolchain_directory}/usr/local/share/venti"
+
+declare -r environment="LD_LIBRARY_PATH=${toolchain_directory}/lib PATH=${PATH}:${toolchain_directory}/bin"
 
 declare -r workdir="${PWD}"
 
-declare -r toolchain_directory='/tmp/senna'
-declare -r share_directory="${toolchain_directory}/usr/local/share/senna"
-
-declare -r environment="LD_LIBRARY_PATH=${toolchain_directory}/lib PATH=${PATH}:${toolchain_directory}/bin"
+declare -r revision="$(git rev-parse --short HEAD)"
 
 declare -r gmp_tarball='/tmp/gmp.tar.xz'
 declare -r gmp_directory='/tmp/gmp-6.3.0'
@@ -35,15 +35,12 @@ declare -r zlib_directory='/tmp/zlib-develop'
 declare -r zstd_tarball='/tmp/zstd.tar.gz'
 declare -r zstd_directory='/tmp/zstd-dev'
 
-declare -r serenity_directory="${workdir}/submodules/serenity"
-
 declare -r max_jobs='30'
 
-declare -r pieflags='-fPIE'
 declare -r ccflags='-w -O2'
 declare -r linkflags='-Xlinker -s'
 
-declare -ra triplets=(
+declare -ra targets=(
 	'riscv64-unknown-serenity'
 	'x86_64-unknown-serenity'
 	'aarch64-unknown-serenity'
@@ -150,7 +147,7 @@ fi
 
 if ! [ -f "${isl_tarball}" ]; then
 	curl \
-		--url 'https://sourceforge.net/projects/libisl/files/isl-0.27.tar.xz' \
+		--url 'https://deb.debian.org/debian/pool/main/i/isl/isl_0.27.orig.tar.xz' \
 		--retry '30' \
 		--retry-all-errors \
 		--retry-delay '0' \
@@ -165,6 +162,45 @@ if ! [ -f "${isl_tarball}" ]; then
 		--file="${isl_tarball}"
 	
 	patch --directory="${isl_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Remove-hardcoded-RPATH-and-versioned-SONAME-from-libisl.patch"
+	
+	for name in "${isl_directory}/isl_test"*; do
+		echo 'int main() {}' > "${name}"
+	done
+fi
+
+if ! [ -f "${binutils_tarball}" ]; then
+	curl \
+		--url 'https://github.com/AmanoTeam/binutils-snapshots/releases/latest/download/binutils.tar.xz' \
+		--retry '30' \
+		--retry-all-errors \
+		--retry-delay '0' \
+		--retry-max-time '0' \
+		--location \
+		--silent \
+		--output "${binutils_tarball}"
+	
+	tar \
+		--directory="$(dirname "${binutils_directory}")" \
+		--extract \
+		--file="${binutils_tarball}"
+	
+	if [[ "${CROSS_COMPILE_TRIPLET}" = *'-darwin'* ]]; then
+		sed \
+			--in-place \
+			's/$$ORIGIN/@loader_path/g' \
+			"${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-binutils-host-tools.patch"
+	fi
+	
+	if [[ "${CROSS_COMPILE_TRIPLET}" = *'bsd'* ]] || [[ "${CROSS_COMPILE_TRIPLET}" = *'dragonfly' ]] then
+		sed \
+			--in-place \
+			's/-Xlinker -rpath/-Xlinker -z -Xlinker origin -Xlinker -rpath/g' \
+			"${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-binutils-host-tools.patch"
+	fi
+	
+	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/patches/0001-Binutils.patch"
+	
+	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Don-t-warn-about-local-symbols-within-the-globals.patch"
 fi
 
 if ! [ -f "${zlib_tarball}" ]; then
@@ -203,36 +239,9 @@ if ! [ -f "${zstd_tarball}" ]; then
 		--file="${zstd_tarball}"
 fi
 
-if ! [ -f "${binutils_tarball}" ]; then
-	curl \
-		--url 'https://github.com/AmanoTeam/binutils-snapshots/releases/latest/download/binutils.tar.xz' \
-		--retry '30' \
-		--retry-all-errors \
-		--retry-delay '0' \
-		--retry-max-time '0' \
-		--location \
-		--silent \
-		--output "${binutils_tarball}"
-	
-	tar \
-		--directory="$(dirname "${binutils_directory}")" \
-		--extract \
-		--file="${binutils_tarball}"
-	
-	if [[ "${CROSS_COMPILE_TRIPLET}" = *'-darwin'* ]]; then
-		sed \
-			--in-place \
-			's/$$ORIGIN/@loader_path/g' \
-			"${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-binutils-host-tools.patch"
-	fi
-	
-	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/patches/0001-Binutils.patch"
-	patch --directory="${binutils_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Don-t-warn-about-local-symbols-within-the-globals.patch"
-fi
-
 if ! [ -f "${gcc_tarball}" ]; then
 	curl \
-		--url 'https://github.com/gcc-mirror/gcc/archive/releases/gcc-15.tar.gz' \
+		--url 'https://github.com/gcc-mirror/gcc/archive/refs/heads/releases/gcc-15.tar.gz' \
 		--retry '30' \
 		--retry-all-errors \
 		--retry-delay '0' \
@@ -250,11 +259,17 @@ if ! [ -f "${gcc_tarball}" ]; then
 		sed \
 			--in-place \
 			's/$$ORIGIN/@loader_path/g' \
-			"${workdir}/submodules/obggcc/patches/0001-Add-relative-RPATHs-to-GCC-host-tools.patch"
+			"${workdir}/submodules/obggcc/patches/0007-Add-relative-RPATHs-to-GCC-host-tools.patch"
+	fi
+	
+	if [[ "${CROSS_COMPILE_TRIPLET}" = *'bsd'* ]] || [[ "${CROSS_COMPILE_TRIPLET}" = *'dragonfly' ]] then
+		sed \
+			--in-place \
+			's/-Xlinker -rpath/-Xlinker -z -Xlinker origin -Xlinker -rpath/g' \
+			"${workdir}/submodules/obggcc/patches/0007-Add-relative-RPATHs-to-GCC-host-tools.patch"
 	fi
 	
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/patches/0001-GCC-15.patch"
-	
 	
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0001-Turn-Wimplicit-function-declaration-back-into-an-warning.patch"
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0002-Fix-libsanitizer-build-on-older-platforms.patch"
@@ -267,8 +282,6 @@ if ! [ -f "${gcc_tarball}" ]; then
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/submodules/obggcc/patches/0009-Fix-missing-stdint.h-include-when-compiling-host-tools-on-OpenBSD.patch"
 	
 	patch --directory="${gcc_directory}" --strip='1' --input="${workdir}/patches/0001-Explicitly-include-sys-select.h.patch"
-	
-	
 fi
 
 # Follow Debian's approach to remove hardcoded RPATHs from binaries
@@ -311,13 +324,19 @@ sed \
 [ -d "${gmp_directory}/build" ] || mkdir "${gmp_directory}/build"
 
 cd "${gmp_directory}/build"
-rm --force --recursive ./*
+
+declare disable_assembly='--disable-assembly'
+
+if [[ "${CROSS_COMPILE_TRIPLET}" != 'mips64el-'* ]]; then
+	disable_assembly=''
+fi
 
 ../configure \
 	--host="${CROSS_COMPILE_TRIPLET}" \
 	--prefix="${toolchain_directory}" \
 	--enable-shared \
 	--disable-static \
+	${disable_assembly} \
 	CFLAGS="${ccflags}" \
 	CXXFLAGS="${ccflags}" \
 	LDFLAGS="${linkflags}"
@@ -328,7 +347,6 @@ make install
 [ -d "${mpfr_directory}/build" ] || mkdir "${mpfr_directory}/build"
 
 cd "${mpfr_directory}/build"
-rm --force --recursive ./*
 
 ../configure \
 	--host="${CROSS_COMPILE_TRIPLET}" \
@@ -346,7 +364,6 @@ make install
 [ -d "${mpc_directory}/build" ] || mkdir "${mpc_directory}/build"
 
 cd "${mpc_directory}/build"
-rm --force --recursive ./*
 
 ../configure \
 	--host="${CROSS_COMPILE_TRIPLET}" \
@@ -378,8 +395,9 @@ fi
 	--with-gmp-prefix="${toolchain_directory}" \
 	--enable-shared \
 	--disable-static \
-	CFLAGS="${pieflags} ${ccflags}" \
-	CXXFLAGS="${pieflags} ${ccflags}" \
+	--with-pic \
+	CFLAGS="${ccflags}" \
+	CXXFLAGS="${ccflags}" \
 	LDFLAGS="${linkflags} ${isl_ldflags}"
 
 make all --jobs
@@ -447,13 +465,18 @@ if [[ "${CROSS_COMPILE_TRIPLET}" = *'-haiku' ]]; then
 	export ac_cv_c_bigendian='no'
 fi
 
-for triplet in "${triplets[@]}"; do
+for triplet in "${targets[@]}"; do
 	declare extra_configure_flags=''
 	
-	declare specs='%{!Qy:-Qn}'
+	declare specs='%{!Qy: -Qn}'
 	
-	if [ "${triplet}" = 'x86_64-unknown-serenity' ]; then
-		declare specs+=' %{!fno-plt:%{!fplt:-fno-plt}}'
+	if ! (( is_native )); then
+		extra_configure_flags+=" --with-cross-host=${CROSS_COMPILE_TRIPLET}"
+		extra_configure_flags+=" --with-toolexeclibdir=${toolchain_directory}/${triplet}/lib/"
+	fi
+	
+	if [[ "${CROSS_COMPILE_TRIPLET}" != *'-darwin'* ]]; then
+		extra_configure_flags+=' --enable-host-bind-now'
 	fi
 	
 	[ -d "${binutils_directory}/build" ] || mkdir "${binutils_directory}/build"
@@ -475,15 +498,15 @@ for triplet in "${triplets[@]}"; do
 		--enable-default-compressed-debug-sections-algorithm='zstd' \
 		--disable-gprofng \
 		--disable-default-execstack \
-		--without-static-standard-libraries \
 		--with-sysroot="${toolchain_directory}/${triplet}" \
 		--with-zstd="${toolchain_directory}" \
 		--with-system-zlib \
+		--without-static-standard-libraries \
 		CFLAGS="-I${toolchain_directory}/include ${ccflags}" \
 		CXXFLAGS="-I${toolchain_directory}/include ${ccflags}" \
 		LDFLAGS="-L${toolchain_directory}/lib ${linkflags}"
 	
-	make all --jobs
+	make all --jobs="${max_jobs}"
 	make install
 	
 	cd "$(mktemp --directory)"
@@ -510,83 +533,66 @@ for triplet in "${triplets[@]}"; do
 	
 	rm --force --recursive ./*
 	
-	if ! (( is_native )); then
-		extra_configure_flags+=" --with-cross-host=${CROSS_COMPILE_TRIPLET}"
-		extra_configure_flags+=" --with-toolexeclibdir=${toolchain_directory}/${triplet}/lib/"
-	fi
-	
-	if [[ "${CROSS_COMPILE_TRIPLET}" != *'-darwin'* ]]; then
-		extra_configure_flags+=' --enable-host-bind-now'
-	fi
-	
-	if [[ "${CROSS_COMPILE_TRIPLET}" = *'-haiku'* ]]; then
-		extra_configure_flags+=" --disable-c++-tools"
-	fi
-	
 	[ -d "${gcc_directory}/build" ] || mkdir "${gcc_directory}/build"
 	
 	cd "${gcc_directory}/build"
-	rm --force --recursive ./*
 	
-	declare cflags_for_target="${ccflags} ${linkflags}"
-	declare cxxflags_for_target="${ccflags} ${linkflags}"
+	rm --force --recursive ./*
 	
 	../configure \
 		--host="${CROSS_COMPILE_TRIPLET}" \
 		--target="${triplet}" \
 		--prefix="${toolchain_directory}" \
-		--with-linker-hash-style='gnu' \
+		--with-linker-hash-style='both' \
 		--with-gmp="${toolchain_directory}" \
 		--with-mpc="${toolchain_directory}" \
 		--with-mpfr="${toolchain_directory}" \
 		--with-isl="${toolchain_directory}" \
 		--with-zstd="${toolchain_directory}" \
 		--with-system-zlib \
-		--with-bugurl='https://github.com/AmanoTeam/Senna/issues' \
 		--with-gcc-major-version-only \
-		--with-pkgversion="Senna v0.5-${revision}" \
 		--with-sysroot="${toolchain_directory}/${triplet}" \
 		--with-native-system-header-dir='/include' \
 		--with-default-libstdcxx-abi='new' \
+		--includedir="${toolchain_directory}/${triplet}/include" \
 		--enable-__cxa_atexit \
 		--enable-cet='auto' \
 		--enable-checking='release' \
 		--enable-clocale='newlib' \
 		--enable-default-pie \
 		--enable-default-ssp \
+		--disable-gnu-unique-object \
 		--enable-gnu-indirect-function \
-		--enable-gnu-unique-object \
+		--enable-languages='c,c++' \
 		--enable-libstdcxx-backtrace \
 		--enable-libstdcxx-filesystem-ts \
 		--enable-libstdcxx-static-eh-pool \
 		--with-libstdcxx-zoneinfo='static' \
-		--with-libstdcxx-lock-policy='auto' \
+		--with-libstdcxx-lock-policy='atomic' \
 		--enable-link-serialization='1' \
 		--enable-linker-build-id \
 		--enable-lto \
+		--enable-plugin \
 		--enable-shared \
 		--enable-threads='posix' \
 		--enable-libstdcxx-threads \
 		--enable-libssp \
-		--enable-languages='c,c++' \
-		--enable-plugin \
 		--enable-cxx-flags="${linkflags}" \
 		--enable-host-pie \
 		--enable-host-shared \
 		--enable-initfini-array \
 		--enable-libgomp \
 		--with-specs="${specs}" \
-		--disable-c++-tools \
+		--with-pic \
 		--disable-libsanitizer \
-		--disable-libgomp \
-		--disable-bootstrap \
-		--disable-multilib \
+		--disable-fixincludes \
 		--disable-libstdcxx-pch \
 		--disable-werror \
-		--disable-nls \
-		--disable-fixincludes \
+		--disable-bootstrap \
+		--disable-multilib \
 		--without-headers \
 		--without-static-standard-libraries \
+		${extra_configure_flags} \
 		CFLAGS="${ccflags}" \
 		CXXFLAGS="${ccflags}" \
 		LDFLAGS="-L${toolchain_directory}/lib ${linkflags}"
@@ -598,16 +604,22 @@ for triplet in "${triplets[@]}"; do
 	fi
 	
 	env ${args} make \
-		CFLAGS_FOR_TARGET="${cflags_for_target}" \
-		CXXFLAGS_FOR_TARGET="${cxxflags_for_target}" \
+		CFLAGS_FOR_TARGET="${ccflags} ${linkflags}" \
+		CXXFLAGS_FOR_TARGET="${ccflags} ${linkflags}" \
+		LDFLAGS_FOR_TARGET="${linkflags}" \
 		gcc_cv_objdump="${CROSS_COMPILE_TRIPLET}-objdump" \
-		all \
-		--jobs="${max_jobs}"
+		all --jobs="${max_jobs}"
 	make install
 	
 	rm "${toolchain_directory}/bin/${triplet}-${triplet}-"* || true
 	
 	cd "${toolchain_directory}/${triplet}/lib64" 2>/dev/null || cd "${toolchain_directory}/${triplet}/lib"
+	
+	if [[ "$(basename "${PWD}")" = 'lib64' ]]; then
+		mv './'* '../lib' || true
+		rmdir "${PWD}"
+		cd '../lib'
+	fi
 	
 	[ -f './libiberty.a' ] && unlink './libiberty.a'
 	
@@ -617,14 +629,6 @@ for triplet in "${triplets[@]}"; do
 	
 	if ! [ -f './liblto_plugin.so' ]; then
 		ln --symbolic "../../libexec/gcc/${triplet}/"*'/liblto_plugin.so' './'
-	fi
-	
-	if [ "${CROSS_COMPILE_TRIPLET}" = "${triplet}" ]; then
-		ln \
-			--symbolic \
-			--relative \
-			"${toolchain_directory}/${triplet}/include/c++" \
-			"${toolchain_directory}/include"
 	fi
 done
 
@@ -649,25 +653,32 @@ fi
 if ! (( is_native )) && [[ "${CROSS_COMPILE_TRIPLET}" != *'-darwin'* ]]; then
 	[ -d "${toolchain_directory}/lib" ] || mkdir "${toolchain_directory}/lib"
 	
-	# libstdc++
-	declare name=$(realpath $("${cc}" --print-file-name='libstdc++.so'))
-	
 	# libestdc++
+	declare name=$(realpath $("${cc}" --print-file-name='libestdc++.so'))
+	
+	# libstdc++
 	if ! [ -f "${name}" ]; then
-		declare name=$(realpath $("${cc}" --print-file-name='libestdc++.so'))
+		declare name=$(realpath $("${cc}" --print-file-name='libstdc++.so'))
 	fi
 	
 	declare soname=$("${readelf}" -d "${name}" | grep 'SONAME' | sed --regexp-extended 's/.+\[(.+)\]/\1/g')
 	
 	cp "${name}" "${toolchain_directory}/lib/${soname}"
 	
-	# libgcc_s
-	declare name=$(realpath $("${cc}" --print-file-name='libgcc_s.so.1'))
-	
 	# libegcc
+	declare name=$(realpath $("${cc}" --print-file-name='libegcc.so'))
+	
 	if ! [ -f "${name}" ]; then
-		declare name=$(realpath $("${cc}" --print-file-name='libegcc.so'))
+		# libgcc_s
+		declare name=$(realpath $("${cc}" --print-file-name='libgcc_s.so.1'))
 	fi
+	
+	declare soname=$("${readelf}" -d "${name}" | grep 'SONAME' | sed --regexp-extended 's/.+\[(.+)\]/\1/g')
+	
+	cp "${name}" "${toolchain_directory}/lib/${soname}"
+	
+	# libatomic
+	declare name=$(realpath $("${cc}" --print-file-name='libatomic.so'))
 	
 	declare soname=$("${readelf}" -d "${name}" | grep 'SONAME' | sed --regexp-extended 's/.+\[(.+)\]/\1/g')
 	
