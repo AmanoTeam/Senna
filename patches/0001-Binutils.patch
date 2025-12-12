@@ -1,6 +1,6 @@
-From 7e0208162d5cdabeeada0a80ed6f4f000ca969dd Mon Sep 17 00:00:00 2001
+From 994c6a8ca56435cd623076c90b5ccf144b25dbc9 Mon Sep 17 00:00:00 2001
 From: Kartatz <105828205+Kartatz@users.noreply.github.com>
-Date: Thu, 11 Dec 2025 02:37:10 -0300
+Date: Fri, 12 Dec 2025 20:10:43 -0300
 Subject: [PATCH] Binutils
 
 ---
@@ -36,7 +36,7 @@ Subject: [PATCH] Binutils
  create mode 100644 ld/testsuite/ld-elf/symbolic-non-weak-func.s
 
 diff --git a/bfd/config.bfd b/bfd/config.bfd
-index 7343f7cb..76707676 100644
+index a9f5f457..85dfa573 100644
 --- a/bfd/config.bfd
 +++ b/bfd/config.bfd
 @@ -285,6 +285,11 @@ case "${targ}" in
@@ -51,7 +51,7 @@ index 7343f7cb..76707676 100644
    aarch64-*-linux* | aarch64-*-netbsd* | aarch64-*-nto* | aarch64-*-gnu*)
      targ_defvec=aarch64_elf64_le_vec
      targ_selvecs="aarch64_elf64_be_vec aarch64_elf32_le_vec aarch64_elf32_be_vec arm_elf32_le_vec arm_elf32_be_vec aarch64_pei_le_vec aarch64_pe_le_vec"
-@@ -734,6 +739,11 @@ case "${targ}" in
+@@ -737,6 +742,11 @@ case "${targ}" in
      targ_selvecs="i386_elf32_vec iamcu_elf32_vec x86_64_elf32_vec"
      want64=true
      ;;
@@ -64,7 +64,7 @@ index 7343f7cb..76707676 100644
    i[3-7]86-*-lynxos*)
      targ_defvec=i386_elf32_vec
 diff --git a/bfd/elflink.c b/bfd/elflink.c
-index 39fac063..b8b535e7 100644
+index 3f60dba1..e453210e 100644
 --- a/bfd/elflink.c
 +++ b/bfd/elflink.c
 @@ -681,14 +681,12 @@ bfd_elf_link_mark_dynamic_symbol (struct bfd_link_info *info,
@@ -153,10 +153,10 @@ index 00fe0f8c..dd81c6ef 100644
    unsigned int resolve_section_groups: 1;
  
 diff --git a/ld/Makefile.am b/ld/Makefile.am
-index c006448b..8d358119 100644
+index 4b0a6ef8..d6690787 100644
 --- a/ld/Makefile.am
 +++ b/ld/Makefile.am
-@@ -386,6 +386,7 @@ ALL_64_EMULATION_SOURCES = \
+@@ -385,6 +385,7 @@ ALL_64_EMULATION_SOURCES = \
  	eaarch64linuxb.c \
  	eaarch64nto.c \
  	eaarch64pe.c \
@@ -164,7 +164,7 @@ index c006448b..8d358119 100644
  	earm64pe.c \
  	eelf32_x86_64.c \
  	eelf32b4300.c \
-@@ -443,6 +444,7 @@ ALL_64_EMULATION_SOURCES = \
+@@ -442,6 +443,7 @@ ALL_64_EMULATION_SOURCES = \
  	eelf64lppc.c \
  	eelf64lppc_fbsd.c \
  	eelf64lriscv.c \
@@ -172,7 +172,7 @@ index c006448b..8d358119 100644
  	eelf64lriscv_lp64.c \
  	eelf64lriscv_lp64f.c \
  	eelf64ltsmip.c \
-@@ -457,6 +459,7 @@ ALL_64_EMULATION_SOURCES = \
+@@ -456,6 +458,7 @@ ALL_64_EMULATION_SOURCES = \
  	eelf_x86_64.c \
  	eelf_x86_64_fbsd.c \
  	eelf_x86_64_haiku.c \
@@ -181,10 +181,10 @@ index c006448b..8d358119 100644
  	ehppa64linux.c \
  	ei386pep.c \
 diff --git a/ld/Makefile.in b/ld/Makefile.in
-index 0acf5f47..9130c1eb 100644
+index dc9bef2b..0701dc27 100644
 --- a/ld/Makefile.in
 +++ b/ld/Makefile.in
-@@ -899,6 +899,7 @@ ALL_64_EMULATION_SOURCES = \
+@@ -898,6 +898,7 @@ ALL_64_EMULATION_SOURCES = \
  	eaarch64linuxb.c \
  	eaarch64nto.c \
  	eaarch64pe.c \
@@ -192,7 +192,7 @@ index 0acf5f47..9130c1eb 100644
  	earm64pe.c \
  	eelf32_x86_64.c \
  	eelf32b4300.c \
-@@ -956,6 +957,7 @@ ALL_64_EMULATION_SOURCES = \
+@@ -955,6 +956,7 @@ ALL_64_EMULATION_SOURCES = \
  	eelf64lppc.c \
  	eelf64lppc_fbsd.c \
  	eelf64lriscv.c \
@@ -200,7 +200,7 @@ index 0acf5f47..9130c1eb 100644
  	eelf64lriscv_lp64.c \
  	eelf64lriscv_lp64f.c \
  	eelf64ltsmip.c \
-@@ -970,6 +972,7 @@ ALL_64_EMULATION_SOURCES = \
+@@ -969,6 +971,7 @@ ALL_64_EMULATION_SOURCES = \
  	eelf_x86_64.c \
  	eelf_x86_64_fbsd.c \
  	eelf_x86_64_haiku.c \
@@ -208,7 +208,7 @@ index 0acf5f47..9130c1eb 100644
  	eelf_x86_64_sol2.c \
  	ehppa64linux.c \
  	ei386pep.c \
-@@ -1280,6 +1283,7 @@ distclean-compile:
+@@ -1279,6 +1282,7 @@ distclean-compile:
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64linuxb.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64nto.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaarch64pe.Po@am__quote@
@@ -216,7 +216,7 @@ index 0acf5f47..9130c1eb 100644
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaix5ppc.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaix5rs6.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaixppc.Po@am__quote@
-@@ -1459,6 +1463,7 @@ distclean-compile:
+@@ -1458,6 +1462,7 @@ distclean-compile:
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lppc.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lppc_fbsd.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lriscv.Po@am__quote@
@@ -224,7 +224,7 @@ index 0acf5f47..9130c1eb 100644
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lriscv_lp64.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64lriscv_lp64f.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf64ltsmip.Po@am__quote@
-@@ -1482,6 +1487,7 @@ distclean-compile:
+@@ -1480,6 +1485,7 @@ distclean-compile:
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_fbsd.Po@am__quote@
  @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_x86_64_haiku.Po@am__quote@
@@ -246,7 +246,7 @@ index 8794e883..6409b244 100644
  
  * Add libdep plugin, for linking dependencies of static libraries that
 diff --git a/ld/configure.tgt b/ld/configure.tgt
-index df31897f..c97270cf 100644
+index 31fa2d8a..120995ed 100644
 --- a/ld/configure.tgt
 +++ b/ld/configure.tgt
 @@ -95,6 +95,9 @@ aarch64-*-freebsd*)	targ_emul=aarch64fbsd
@@ -259,7 +259,7 @@ index df31897f..c97270cf 100644
  aarch64_be-*-linux-gnu_ilp32)
  			targ_emul=aarch64linux32b
  			targ_extra_libpath="aarch64linuxb aarch64linux aarch64linux32 armelfb_linux_eabi armelf_linux_eabi"
-@@ -822,6 +825,9 @@ riscv64*-*-linux*)	targ_emul=elf64lriscv
+@@ -824,6 +827,9 @@ riscv64*-*-linux*)	targ_emul=elf64lriscv
  			targ_extra_emuls="elf64lriscv_lp64f elf64lriscv_lp64 elf32lriscv elf32lriscv_ilp32f elf32lriscv_ilp32 elf64briscv elf64briscv_lp64f elf64briscv_lp64 elf32briscv elf32briscv_ilp32f elf32briscv_ilp32"
  			targ_extra_libpath=$targ_extra_emuls
  			;;
@@ -269,16 +269,16 @@ index df31897f..c97270cf 100644
  riscv64be*-*-*)		targ_emul=elf64briscv
  			targ_extra_emuls="elf32briscv elf64lriscv elf32lriscv"
  			targ_extra_libpath=$targ_extra_emuls
-@@ -1006,6 +1012,9 @@ x86_64-*-linux-*)	targ_emul=elf_x86_64
+@@ -1008,6 +1014,9 @@ x86_64-*-linux-*)	targ_emul=elf_x86_64
  x86_64-*-redox*)	targ_emul=elf_x86_64
  			targ_extra_emuls=elf_i386
  			;;
 +x86_64-*-serenity*)	targ_emul=elf_x86_64_serenity
 +			targ_extra_emuls="elf_x86_64 elf_i386"
 +			;;
- x86_64-*-solaris2*)	targ_emul=elf_x86_64_sol2
- 			targ_extra_emuls="elf_x86_64 elf_i386_sol2 elf_i386_ldso elf_i386 elf_iamcu"
- 			targ_extra_libpath=$targ_extra_emuls
+ x86_64-*-solaris2.1[01]*)
+ 			targ_emul=elf_x86_64_sol2
+ 			targ_extra_emuls="elf_i386_sol2 elf_x86_64 elf_i386"
 diff --git a/ld/emulparams/aarch64serenity.sh b/ld/emulparams/aarch64serenity.sh
 new file mode 100644
 index 00000000..8c037db1
